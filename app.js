@@ -64,7 +64,43 @@
       goals: {},
       mistakes: [],
       quoteNotes: {},
-      favorites: []
+      favorites: [],
+      mkTrash: [],
+      updatedAt: 0,
+      resetAt: 0
+    };
+  }
+
+  // 把任意来源（本机 localStorage / 云端 jsonb）整理成当前版本的结构
+  function normalizeState(p) {
+    var base = defaultState();
+    if (!p || typeof p !== 'object') return base;
+    return {
+      nickname: typeof p.nickname === 'string' ? p.nickname : '',
+      startDate: p.startDate || base.startDate,
+      settings: Object.assign({}, base.settings, p.settings || {}),
+      checkins: p.checkins && typeof p.checkins === 'object' ? p.checkins : {},
+      reviews: p.reviews && typeof p.reviews === 'object' ? p.reviews : {},
+      goals: p.goals && typeof p.goals === 'object' ? p.goals : {},
+      mistakes: Array.isArray(p.mistakes) ? p.mistakes.filter(function (m) {
+        return m && typeof m === 'object' && typeof m.title === 'string' && m.title.trim();
+      }).slice(0, 500).map(function (m) {
+        var at = typeof m.at === 'number' && isFinite(m.at) ? m.at : Date.now();
+        return {
+          id: typeof m.id === 'string' && m.id ? m.id : 'mk-' + Math.random().toString(36).slice(2, 9),
+          subject: SUBJECT_COLOR[m.subject] ? m.subject : '语文',
+          title: String(m.title).slice(0, 120),
+          reason: typeof m.reason === 'string' ? m.reason.slice(0, 400) : '',
+          done: !!m.done,
+          at: at,
+          upd: typeof m.upd === 'number' && isFinite(m.upd) ? m.upd : at
+        };
+      }) : [],
+      quoteNotes: p.quoteNotes && typeof p.quoteNotes === 'object' ? p.quoteNotes : {},
+      favorites: Array.isArray(p.favorites) ? p.favorites.filter(function (t) { return typeof t === 'string'; }) : [],
+      mkTrash: Array.isArray(p.mkTrash) ? p.mkTrash.filter(function (t) { return typeof t === 'string'; }) : [],
+      updatedAt: typeof p.updatedAt === 'number' && isFinite(p.updatedAt) ? p.updatedAt : 0,
+      resetAt: typeof p.resetAt === 'number' && isFinite(p.resetAt) ? p.resetAt : 0
     };
   }
 
@@ -76,40 +112,16 @@
   var reviewWeekKey = null;
 
   function loadState() {
-    var base = defaultState();
     try {
       var raw = localStorage.getItem(KEY);
-      if (!raw) return base;
-      var p = JSON.parse(raw);
-      if (!p || typeof p !== 'object') return base;
-      return {
-        nickname: typeof p.nickname === 'string' ? p.nickname : '',
-        startDate: p.startDate || base.startDate,
-        settings: Object.assign({}, base.settings, p.settings || {}),
-        checkins: p.checkins && typeof p.checkins === 'object' ? p.checkins : {},
-        reviews: p.reviews && typeof p.reviews === 'object' ? p.reviews : {},
-        goals: p.goals && typeof p.goals === 'object' ? p.goals : {},
-        mistakes: Array.isArray(p.mistakes) ? p.mistakes.filter(function (m) {
-          return m && typeof m === 'object' && typeof m.title === 'string' && m.title.trim();
-        }).slice(0, 500).map(function (m) {
-          return {
-            id: typeof m.id === 'string' && m.id ? m.id : 'mk-' + Math.random().toString(36).slice(2, 9),
-            subject: SUBJECT_COLOR[m.subject] ? m.subject : '语文',
-            title: String(m.title).slice(0, 120),
-            reason: typeof m.reason === 'string' ? m.reason.slice(0, 400) : '',
-            done: !!m.done,
-            at: typeof m.at === 'number' && isFinite(m.at) ? m.at : Date.now()
-          };
-        }) : [],
-        quoteNotes: p.quoteNotes && typeof p.quoteNotes === 'object' ? p.quoteNotes : {},
-        favorites: Array.isArray(p.favorites) ? p.favorites.filter(function (t) { return typeof t === 'string'; }) : []
-      };
+      if (!raw) return defaultState();
+      return normalizeState(JSON.parse(raw));
     } catch (e) {
-      return base;
+      return defaultState();
     }
   }
 
-  function save() {
+  function saveLocal() {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
@@ -118,6 +130,13 @@
         toast('浏览器禁止本地存储，本次修改无法保存');
       }
     }
+  }
+
+  // 所有改动都走这里：先落本机，再排队推云端（未登录时 push 是空操作）
+  function save() {
+    state.updatedAt = Date.now();
+    saveLocal();
+    scheduleCloudPush();
   }
 
   /* ---------------- 任务生成 ---------------- */
@@ -603,7 +622,8 @@
       title: title.slice(0, 120),
       reason: reasonEl ? reasonEl.value.trim().slice(0, 400) : '',
       done: false,
-      at: Date.now()
+      at: Date.now(),
+      upd: Date.now()
     });
     save();
     titleEl.value = '';
@@ -618,6 +638,7 @@
     var m = (state.mistakes || []).filter(function (x) { return x.id === id; })[0];
     if (!m) return;
     m.done = !m.done;
+    m.upd = Date.now();
     save();
     renderMistakes();
     toast(m.done ? '已标记弄懂，可以移出清单了' : '已改回待弄懂');
@@ -627,6 +648,9 @@
     var before = (state.mistakes || []).length;
     state.mistakes = (state.mistakes || []).filter(function (x) { return x.id !== id; });
     if (state.mistakes.length === before) return;
+    // 记进回收名单，避免另一台设备的旧数据把它带回来
+    if (!Array.isArray(state.mkTrash)) state.mkTrash = [];
+    if (state.mkTrash.indexOf(id) < 0) state.mkTrash.push(id);
     save();
     renderMistakes();
     toast('已删除这道错题');
@@ -1595,18 +1619,23 @@
   var clearBtn = $('#clearData');
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
+      var signedIn = !!syncUser;
       openConfirm({
         title: '确定清空所有数据？',
-        text: '打卡记录、每周复盘和月度目标都会被删除，且无法恢复。',
+        text: signedIn
+          ? '本机与云端的打卡、复盘、错题、笔记和收藏都会被删除，其他设备在下次同步后也会一并清空，且无法恢复。'
+          : '打卡记录、每周复盘、错题、笔记和收藏都会被删除，且无法恢复。',
         confirmText: '确认清空',
         onConfirm: function () {
           state = defaultState();
+          state.resetAt = Date.now();
           try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
           save();
           dailyDate = new Date();
           reviewWeekKey = null;
+          mkFilter = 'all';
           renderView(activeView);
-          toast('已清空，重新开始');
+          toast(signedIn ? '已清空，云端会一起清空' : '已清空，重新开始');
         }
       });
     });
@@ -1794,6 +1823,411 @@
     });
   }
 
+  /* ============================================================
+     云端同步（Supabase）
+     · 本机数据仍是主线：未登录 / 断网时一切功能照旧
+     · 登录后：拉取云端 → 与本地按记录合并 → 回写云端
+     ============================================================ */
+  var CLOUD = {
+    url: 'https://eifsqvpqzaxnqijijvyi.supabase.co',
+    key: 'sb_publishable__KdVGu89KVi1N1519pHAwA_jlrWGheu',
+    table: 'zhixing_saves',
+    meta: 'zhixing.study.sync.v1'
+  };
+
+  var cloud = null;              // supabase client
+  var syncUser = null;           // { id, email }
+  var syncBusy = false;
+  var syncQueued = false;
+  var pushTimer = null;
+  var syncStatus = 'idle';       // idle | syncing | synced | error
+  var syncError = '';
+  var syncMeta = readSyncMeta();
+
+  function readSyncMeta() {
+    try {
+      var raw = localStorage.getItem(CLOUD.meta);
+      var p = raw ? JSON.parse(raw) : null;
+      return {
+        lastSyncedAt: p && typeof p.lastSyncedAt === 'number' ? p.lastSyncedAt : 0,
+        email: p && typeof p.email === 'string' ? p.email : ''
+      };
+    } catch (e) {
+      return { lastSyncedAt: 0, email: '' };
+    }
+  }
+
+  function writeSyncMeta() {
+    try { localStorage.setItem(CLOUD.meta, JSON.stringify(syncMeta)); } catch (e) { /* ignore */ }
+  }
+
+  function cloudReady() { return !!(cloud && syncUser); }
+
+  /* ---- 合并：集合类按记录合，标量类取最后修改的那一份 ---- */
+  function eachKey(a, b, fn) {
+    var seen = {};
+    [a, b].forEach(function (m) {
+      if (!m || typeof m !== 'object') return;
+      Object.keys(m).forEach(function (k) {
+        if (seen[k]) return;
+        seen[k] = 1;
+        fn(k);
+      });
+    });
+  }
+
+  function mergeCheckins(a, b) {
+    var out = {};
+    eachKey(a, b, function (k) {
+      var list = [];
+      [a, b].forEach(function (m) {
+        var arr = m && Array.isArray(m[k]) ? m[k] : [];
+        arr.forEach(function (id) { if (list.indexOf(id) < 0) list.push(id); });
+      });
+      if (list.length) out[k] = list;
+    });
+    return out;
+  }
+
+  function mergeReviews(a, b) {
+    var out = {};
+    eachKey(a, b, function (k) {
+      var ra = a && a[k], rb = b && b[k];
+      if (!ra) { out[k] = rb; return; }
+      if (!rb) { out[k] = ra; return; }
+      out[k] = ((rb.at || 0) > (ra.at || 0)) ? rb : ra;
+    });
+    return out;
+  }
+
+  function mergeMistakes(a, b) {
+    var byId = {};
+    (Array.isArray(a) ? a : []).concat(Array.isArray(b) ? b : []).forEach(function (m) {
+      if (!m || !m.id) return;
+      var cur = byId[m.id];
+      if (!cur) { byId[m.id] = m; return; }
+      if ((m.upd || m.at || 0) >= (cur.upd || cur.at || 0)) byId[m.id] = m;
+    });
+    return Object.keys(byId).map(function (k) { return byId[k]; });
+  }
+
+  function mergeNotes(a, b) {
+    var out = {};
+    eachKey(a, b, function (k) {
+      var list = [], seen = {};
+      [a, b].forEach(function (m) {
+        var recs = m && Array.isArray(m[k]) ? m[k] : [];
+        recs.forEach(function (r) {
+          if (!r || typeof r.note !== 'string') return;
+          var sig = String(r.t || 0) + '|' + r.note;
+          if (seen[sig]) return;
+          seen[sig] = 1;
+          list.push(r);
+        });
+      });
+      list.sort(function (x, y) { return (x.t || 0) - (y.t || 0); });
+      if (list.length) out[k] = list;
+    });
+    return out;
+  }
+
+  function unionList(a, b) {
+    var out = [];
+    [a, b].forEach(function (arr) {
+      (Array.isArray(arr) ? arr : []).forEach(function (v) {
+        if (typeof v === 'string' && out.indexOf(v) < 0) out.push(v);
+      });
+    });
+    return out;
+  }
+
+  function mergeStates(localS, remoteS) {
+    // 「清空数据」以较晚的那次为准：整份覆盖，避免旧记录被合并回来
+    if (remoteS.resetAt && remoteS.resetAt > (localS.resetAt || 0)) return remoteS;
+    if (localS.resetAt && localS.resetAt > (remoteS.resetAt || 0)) return localS;
+
+    var newer = (remoteS.updatedAt || 0) > (localS.updatedAt || 0) ? remoteS : localS;
+    var trash = unionList(localS.mkTrash, remoteS.mkTrash);
+    var mistakes = mergeMistakes(localS.mistakes, remoteS.mistakes).filter(function (m) {
+      return trash.indexOf(m.id) < 0;
+    });
+    return {
+      nickname: newer.nickname || '',
+      startDate: newer.startDate || localS.startDate,
+      settings: Object.assign({}, localS.settings, newer.settings),
+      goals: Object.assign({}, localS.goals, newer.goals),
+      checkins: mergeCheckins(localS.checkins, remoteS.checkins),
+      reviews: mergeReviews(localS.reviews, remoteS.reviews),
+      mistakes: mistakes,
+      quoteNotes: mergeNotes(localS.quoteNotes, remoteS.quoteNotes),
+      favorites: unionList(localS.favorites, remoteS.favorites),
+      mkTrash: trash,
+      updatedAt: Math.max(localS.updatedAt || 0, remoteS.updatedAt || 0),
+      resetAt: Math.max(localS.resetAt || 0, remoteS.resetAt || 0)
+    };
+  }
+
+  /* ---- 读写云端 ---- */
+  function pullFromCloud() {
+    return cloud.from(CLOUD.table)
+      .select('data, updated_at')
+      .eq('user_id', syncUser.id)
+      .maybeSingle()
+      .then(function (res) {
+        if (res && res.error) throw res.error;
+        return (res && res.data) || null;
+      });
+  }
+
+  function pushToCloud() {
+    return cloud.from(CLOUD.table)
+      .upsert({ user_id: syncUser.id, data: state }, { onConflict: 'user_id' })
+      .then(function (res) {
+        if (res && res.error) throw res.error;
+      });
+  }
+
+  function syncNow(reason) {
+    if (!cloudReady()) return;
+    if (syncBusy) { syncQueued = true; return; }
+    syncBusy = true;
+    syncStatus = 'syncing';
+    syncError = '';
+    renderSyncUI();
+
+    var changed = false;
+    pullFromCloud().then(function (row) {
+      if (row && row.data) {
+        var before = JSON.stringify(state);
+        state = mergeStates(state, normalizeState(row.data));
+        if (JSON.stringify(state) !== before) changed = true;
+        if (changed) saveLocal();
+      }
+      return pushToCloud();
+    }).then(function () {
+      syncMeta.lastSyncedAt = Date.now();
+      syncMeta.email = syncUser.email || '';
+      writeSyncMeta();
+      syncStatus = 'synced';
+      syncBusy = false;
+      renderSyncUI();
+      if (changed) refreshAfterSync();
+      if (syncQueued) { syncQueued = false; syncNow('queued'); }
+    }).catch(function (err) {
+      syncStatus = 'error';
+      syncError = describeCloudError(err);
+      syncBusy = false;
+      renderSyncUI();
+    });
+  }
+
+  function scheduleCloudPush() {
+    if (!cloudReady()) return;
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(function () {
+      pushTimer = null;
+      syncNow('local');
+    }, 1200);
+  }
+
+  function refreshAfterSync() {
+    try {
+      renderView(activeView);
+      updateSideStreak();
+    } catch (e) { /* 单次渲染失败不影响数据 */ }
+  }
+
+  function describeCloudError(err) {
+    var m = (err && (err.message || err.error_description || err.msg)) || '';
+    if (/Invalid login credentials/i.test(m)) return '邮箱或密码不对';
+    if (/User already registered/i.test(m)) return '这个邮箱已注册，直接点登录';
+    if (/Password should be at least/i.test(m)) return '密码太短了（至少 6 位）';
+    if (/Email not confirmed/i.test(m)) return '邮箱还没验证，去 Supabase 关掉 Confirm email';
+    if (/Failed to fetch|NetworkError|load failed/i.test(m)) return '网络连不上，稍后再试';
+    if (/JWT|apikey|Invalid API key/i.test(m)) return '密钥无效';
+    return m || '未知错误';
+  }
+
+  /* ---- 登录态 UI ---- */
+  function fmtClock(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function renderSyncUI() {
+    var badge = $('#syncBadge');
+    var outBox = $('#syncSignedOut');
+    var inBox = $('#syncSignedIn');
+    var emailShow = $('#syncEmailShow');
+    var statusText = $('#syncStatusText');
+    if (!badge) return;
+
+    var hasCloud = !!cloud;
+    if (outBox) outBox.hidden = !!syncUser || !hasCloud;
+    if (inBox) inBox.hidden = !syncUser;
+
+    if (!hasCloud) {
+      badge.textContent = '云端不可用';
+      badge.setAttribute('data-state', 'off');
+      if (outBox) outBox.hidden = false;
+      var hint0 = $('#syncAuthHint');
+      if (hint0) hint0.textContent = '云端组件没能加载，登录功能暂时不可用；本机记录照常保存。';
+      var off = $('#syncLogin'), so = $('#syncSignup');
+      if (off) off.disabled = true;
+      if (so) so.disabled = true;
+      return;
+    }
+
+    if (!syncUser) {
+      badge.textContent = '未登录';
+      badge.setAttribute('data-state', 'idle');
+      return;
+    }
+
+    if (emailShow) emailShow.textContent = syncUser.email || '';
+    var label = '已同步';
+    var state = 'ok';
+    var text = '尚未同步';
+    if (syncStatus === 'syncing') { label = '同步中…'; state = 'busy'; text = '正在上传本机改动…'; }
+    else if (syncStatus === 'error') { label = '同步失败'; state = 'err'; text = '同步失败：' + syncError; }
+    else if (syncStatus === 'synced') { text = '已同步 · 最近一次 ' + fmtClock(syncMeta.lastSyncedAt); }
+    else { label = '待同步'; state = 'idle'; }
+    badge.textContent = label;
+    badge.setAttribute('data-state', state);
+    if (statusText) statusText.textContent = text;
+  }
+
+  function authSubmit(mode) {
+    if (!cloud) return;
+    var emailEl = $('#syncEmail');
+    var passEl = $('#syncPassword');
+    var hint = $('#syncAuthHint');
+    var email = (emailEl && emailEl.value || '').trim();
+    var pass = (passEl && passEl.value) || '';
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (hint) hint.textContent = '邮箱格式看起来不对，检查一下。';
+      return;
+    }
+    if (pass.length < 6) {
+      if (hint) hint.textContent = '密码至少 6 位。';
+      return;
+    }
+    if (hint) hint.textContent = mode === 'signup' ? '正在注册…' : '正在登录…';
+
+    var req = mode === 'signup'
+      ? cloud.auth.signUp({ email: email, password: pass })
+      : cloud.auth.signInWithPassword({ email: email, password: pass });
+
+    Promise.resolve(req).then(function (res) {
+      if (res && res.error) throw res.error;
+      var session = res && res.data && res.data.session;
+      if (mode === 'signup' && !session) {
+        if (hint) hint.textContent = '注册成功，但还需要邮箱验证。请在 Supabase 里关掉 Confirm email 后再注册一次。';
+        return;
+      }
+      if (passEl) passEl.value = '';
+      if (hint) hint.textContent = '';
+      var user = res && res.data && res.data.user;
+      if (user) {
+        syncUser = { id: user.id, email: user.email || email };
+        syncStatus = 'idle';
+        renderSyncUI();
+        syncNow('login');
+      }
+    }).catch(function (err) {
+      if (hint) hint.textContent = describeCloudError(err);
+    });
+  }
+
+  function signOut() {
+    if (!cloud) return;
+    cloud.auth.signOut().then(function () {
+      syncUser = null;
+      syncStatus = 'idle';
+      renderSyncUI();
+      toast('已退出登录，本机数据保留');
+    }).catch(function () {
+      syncUser = null;
+      syncStatus = 'idle';
+      renderSyncUI();
+    });
+  }
+
+  function onSignedIn(user) {
+    syncUser = { id: user.id, email: user.email || '' };
+    syncMeta.email = syncUser.email;
+    writeSyncMeta();
+    syncStatus = 'idle';
+    renderSyncUI();
+    syncNow('login');
+  }
+
+  function initCloud() {
+    if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+      cloud = null;
+      renderSyncUI();
+      return;
+    }
+    try {
+      cloud = window.supabase.createClient(CLOUD.url, CLOUD.key, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+          storageKey: 'zhixing.study.auth'
+        }
+      });
+    } catch (e) {
+      cloud = null;
+      renderSyncUI();
+      return;
+    }
+
+    renderSyncUI();
+
+    cloud.auth.getSession().then(function (res) {
+      var s = res && res.data && res.data.session;
+      if (s && s.user) onSignedIn(s.user);
+      else renderSyncUI();
+    }).catch(function () { renderSyncUI(); });
+
+    cloud.auth.onAuthStateChange(function (event, session) {
+      var u = session && session.user;
+      if (u && (!syncUser || syncUser.id !== u.id)) onSignedIn(u);
+      else if (!u && syncUser) { syncUser = null; syncStatus = 'idle'; renderSyncUI(); }
+    });
+  }
+
+  function bindSyncUI() {
+    var loginBtn = $('#syncLogin');
+    var signupBtn = $('#syncSignup');
+    var logoutBtn = $('#syncLogout');
+    var nowBtn = $('#syncNow');
+    var passEl = $('#syncPassword');
+
+    if (loginBtn) loginBtn.addEventListener('click', function () { authSubmit('signin'); });
+    if (signupBtn) signupBtn.addEventListener('click', function () { authSubmit('signup'); });
+    if (logoutBtn) logoutBtn.addEventListener('click', signOut);
+    if (nowBtn) nowBtn.addEventListener('click', function () {
+      if (!syncUser) return;
+      toast('开始同步…');
+      syncNow('manual');
+    });
+    if (passEl) passEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); authSubmit('signin'); }
+    });
+
+    window.addEventListener('online', function () { if (syncUser) syncNow('online'); });
+    window.addEventListener('focus', function () {
+      if (!syncUser || syncBusy) return;
+      if (Date.now() - syncMeta.lastSyncedAt < 60000) return;
+      syncNow('focus');
+    });
+  }
+
   /* ---------------- 尺寸变化 ---------------- */
   var resizeTimer = null;
   window.addEventListener('resize', function () {
@@ -1815,6 +2249,9 @@
 
     dailyDate = new Date();
     navigate(start);
+
+    bindSyncUI();
+    initCloud();
 
     // 首屏加载后校准指示条与入场动画
     setTimeout(moveIndicator, 60);

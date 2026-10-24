@@ -1,7 +1,7 @@
 # 知行 · 月考后学习提升计划
 
 一个纯静态的学习计划单页站点。把「月考后补短板」拆成每天六个小动作，做完就打勾。
-没有后端、没有构建步骤、不联网，所有数据存在浏览器的 localStorage 里。
+没有构建步骤、没有自建后端：数据默认存在浏览器的 localStorage，登录后可选择同步到云端。
 
 ## 页面
 
@@ -15,7 +15,7 @@
 | 错题本 | 按科目记录错题与错因，勾掉已弄懂的，只留还没懂的 |
 | 每日名句 | 每天一句名句 + 解析，可写自己的理解、查看历史、收藏 |
 | 收藏 | 收藏过的句子连同解析与你的理解一起陈列 |
-| 设置 | 昵称、起始日期、提醒开关、清空本机数据 |
+| 设置 | 昵称、起始日期、提醒开关、云端同步、清空数据 |
 
 ## 任务怎么来的
 
@@ -28,12 +28,14 @@
 ## 文件
 
 ```
-├── index.html     页面结构与 SVG 图标集（全部视图在一个文件里，用 data-view 切换）
-├── style.css      设计系统：配色变量、组件、响应式断点（1080 / 900 / 560 / 520 / 430）
-├── app.js         原生 JS：路由、状态、localStorage 持久化、工具计算
-├── hero-bg.png    首屏水彩插画
-├── closing-bg.png 页尾水彩插画
-└── quotes-bg.png  名句页水彩背景
+├── index.html          页面结构与 SVG 图标集（全部视图在一个文件里，用 data-view 切换）
+├── style.css           设计系统：配色变量、组件、响应式断点（1080 / 900 / 560 / 520 / 430）
+├── app.js              原生 JS：路由、状态、localStorage 持久化、云端同步、工具计算
+├── vendor/
+│   └── supabase-js.js  Supabase 浏览器 SDK（本地内置，避免运行时依赖 CDN）
+├── hero-bg.png         首屏水彩插画
+├── closing-bg.png      页尾水彩插画
+└── quotes-bg.png       名句页水彩背景
 ```
 
 ## 本地预览
@@ -45,16 +47,54 @@ python -m http.server 8765
 # 打开 http://127.0.0.1:8765/
 ```
 
+## 云端同步（可选）
+
+不登录时一切照旧，数据只在本机。设置页登录后才会启用同步。
+
+- 后端用的是 **Supabase**（Postgres + Auth + 行级权限），前端用官方 SDK 直连，没有自建服务器
+- 每个账号在 `public.zhixing_saves` 里占一行，`data`（jsonb）存整份状态快照
+- 表开启了 RLS，四条策略限制成「只能读写自己那一行」；publishable key 公开在前端是允许的，真正的保护是 RLS
+- 会话由 SDK 存在浏览器里，下次打开自动恢复，无需重复登录
+
+**同步策略（本地优先）**：任何改动先落本机、再延迟 1.2 秒推云端；拉取时先合并再回写，所以两台设备离线各改各的也不会互相覆盖。
+
+| 数据类型 | 合并方式 |
+| --- | --- |
+| 打卡记录 | 按日期取并集（每项任务各算一条） |
+| 每周复盘 | 同一周取 `at` 较晚的一份 |
+| 错题 | 按 `id` 合并，同一条取 `upd` 较晚的；删除记入 `mkTrash` 墓碑，不会被另一台设备带回 |
+| 名句理解 | 按「时间 + 内容」去重取并集 |
+| 收藏 | 取并集 |
+| 昵称 / 目标 / 开关 | 取 `updatedAt` 较晚的那一份 |
+| 清空数据 | 记 `resetAt`，较晚的一次整份覆盖，其他设备同步后一起清空 |
+
+已知限制：两台设备**同时离线**各自删了不同的记录时，仅错题本用墓碑保护；收藏、目标这类整体取「较晚一份」的字段，请以最后一次操作为准。
+
+**换成自己的 Supabase 项目**：改 `app.js` 顶部的 `CLOUD` 常量即可，并按下表建好库：
+
+```sql
+create table if not exists public.zhixing_saves (
+  user_id     uuid        primary key references auth.users (id) on delete cascade,
+  data        jsonb       not null default '{}'::jsonb,
+  updated_at  timestamptz not null default now(),
+  device_hint text
+);
+alter table public.zhixing_saves enable row level security;
+-- select / insert / update / delete 四条策略均限定 auth.uid() = user_id
+```
+
 ## 数据与隐私
 
-- 只有一份存储键：`zhixing.study.plan.v1`（localStorage）
-- 不发起业务网络请求；字体来自 Google Fonts（Instrument Serif / Geist），断网时回落到系统字体
-- 换浏览器、换设备、清缓存都不会带走数据；设置页的「清空数据」会一次清掉打卡、复盘、目标、错题、名句笔记与收藏
+- 本机存储键：`zhixing.study.plan.v1`（数据）、`zhixing.study.auth`（登录会话）、`zhixing.study.sync.v1`（同步时间戳）
+- 未登录时**不发起任何业务请求**；字体来自 Google Fonts（Instrument Serif / Geist），断网回落到系统字体
+- 云端只存学习记录（打卡、复盘、错题、笔记、收藏），没有手机号、支付信息
+- 换浏览器、换设备、清缓存都不会带走数据；设置页的「清空数据」会一次清掉打卡、复盘、目标、错题、名句笔记与收藏（登录状态下连同云端一起清）
+- 网络或 SDK 加载失败时同步会自动降级：界面提示「云端不可用」，打卡等功能照常可用
 
 ## 技术与设计
 
 - 原生 HTML / CSS / JavaScript（ES5 风格写法，无需编译）
-- 无框架、无依赖、无构建；首屏只加载 3 张图 + 1 个 CSS + 1 个 JS
+- 无框架、无构建；唯一的第三方脚本是内置的 `vendor/supabase-js.js`
 - 设计语言：米白纸感背景 + 深墨绿 + 陶土红，衬线斜体标题，水彩插画与颗粒质感
 - 无障碍：语义化标签、`aria-pressed` / `aria-checked` / `aria-current`、键盘可操作、`prefers-reduced-motion` 降级
 

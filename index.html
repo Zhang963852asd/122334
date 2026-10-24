@@ -392,7 +392,7 @@
         <header class="page-head">
           <div>
             <h1 class="page-title">偏好<em>设置</em></h1>
-            <p class="page-sub">所有数据只保存在这台设备的浏览器里。</p>
+            <p class="page-sub">默认只存在这台设备的浏览器里；登录后可以同步到你的其他设备。</p>
           </div>
         </header>
 
@@ -424,15 +424,53 @@
           </div>
         </div>
 
+        <div class="sync-card" id="syncCard">
+          <header class="sync-head">
+            <div>
+              <strong>云端同步</strong>
+              <p>登录后，打卡、复盘、错题与收藏会同步到你的其他设备。</p>
+            </div>
+            <span class="sync-badge" id="syncBadge" data-state="idle">未登录</span>
+          </header>
+
+          <div id="syncSignedOut">
+            <div class="sync-form">
+              <label class="mk-field" for="syncEmail">
+                <span>邮箱</span>
+                <input id="syncEmail" type="email" autocomplete="email" inputmode="email" maxlength="120" placeholder="you@example.com">
+              </label>
+              <label class="mk-field" for="syncPassword">
+                <span>密码（至少 6 位）</span>
+                <input id="syncPassword" type="password" autocomplete="current-password" maxlength="72" placeholder="••••••">
+              </label>
+            </div>
+            <div class="sync-actions">
+              <button class="btn btn-solid btn-sm" type="button" id="syncLogin">登录</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="syncSignup">注册新账号</button>
+            </div>
+            <p class="sync-hint" id="syncAuthHint">账号只用来同步；不登录也能正常打卡，数据照旧存在本机。</p>
+          </div>
+
+          <div id="syncSignedIn" hidden>
+            <p class="sync-line">已登录 <b id="syncEmailShow"></b></p>
+            <p class="sync-line" id="syncStatusText">尚未同步</p>
+            <div class="sync-actions">
+              <button class="btn btn-solid btn-sm" type="button" id="syncNow">立即同步</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="syncLogout">退出登录</button>
+            </div>
+            <p class="sync-hint">两台设备同时离线修改时，按记录逐条合并：打卡、复盘、错题、笔记取并集，昵称与目标取较晚的一份。</p>
+          </div>
+        </div>
+
         <div class="danger-card">
           <div>
             <strong>清空本机数据</strong>
-            <p>会删除所有打卡记录、每周复盘与月度目标，且无法恢复。</p>
+            <p>会删除所有打卡记录、复盘、错题、笔记与收藏，且无法恢复。</p>
           </div>
           <button class="btn btn-danger" type="button" id="clearData">清空数据</button>
         </div>
 
-        <p class="settings-note">知行 · 月考后学习提升计划 · 本页不联网，数据存在 localStorage</p>
+        <p class="settings-note">知行 · 月考后学习提升计划 · 数据默认存在本机 localStorage，登录后同步到云端</p>
       </div>
     </section>
 
@@ -751,6 +789,7 @@
 
 <noscript><p style="padding:24px;font-family:sans-serif">这个页面需要开启 JavaScript 才能记录打卡数据。</p></noscript>
 
+<script src="vendor/supabase-js.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
