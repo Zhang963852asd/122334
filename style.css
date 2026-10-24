@@ -1750,3 +1750,283 @@ textarea:focus {
   .nav-item, .sidebar { opacity: 1 !important; transform: none !important; }
   .hero-bg, .closing-bg { transform: none; }
 }
+
+/* ============================================================
+   学习工具 / 每日名句 / 角落寄语（新增）
+   ============================================================ */
+
+/* ---------- 角落寄语：低调、不抢眼 ---------- */
+.whisper {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 2px 2px 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--muted-soft);
+  opacity: 0.72;
+  user-select: none;
+}
+.whisper::before {
+  content: "";
+  width: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200, 85, 61, 0.42));
+}
+
+/* ---------- 学习工具 ---------- */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 22px 22px 24px;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.tool-head { display: flex; align-items: flex-start; gap: 12px; }
+.tool-index {
+  font-family: var(--serif);
+  font-size: 26px;
+  line-height: 0.9;
+  color: var(--clay);
+  opacity: 0.5;
+}
+.tool-head h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 21px;
+  letter-spacing: 0.02em;
+  color: var(--ink-deep);
+}
+.tool-head p { font-size: 12px; color: var(--muted); margin-top: 4px; letter-spacing: 0.02em; }
+
+.tool-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tool-fields.solo { grid-template-columns: 1fr; }
+.tool-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.tool-fields input {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink-deep);
+  background: var(--cream-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: border-color 0.22s var(--ease), background 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+.tool-fields input:focus {
+  outline: none;
+  border-color: rgba(200, 85, 61, 0.55);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(200, 85, 61, 0.1);
+}
+.tool-fields input::placeholder { color: var(--muted-soft); }
+
+.tool-run { align-self: flex-start; padding: 11px 22px; font-size: 13.5px; }
+
+/* 目标分单位切换 */
+.tool-unit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: -2px;
+  flex-wrap: wrap;
+}
+.tool-unit-label {
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.unit-chip {
+  padding: 5px 11px;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.unit-chip:hover { color: var(--ink-deep); border-color: rgba(28, 42, 30, 0.32); }
+.unit-chip.is-on {
+  color: var(--cream);
+  background: var(--ink-deep);
+  border-color: var(--ink-deep);
+}
+.unit-chip:focus-visible {
+  outline: 2px solid rgba(200, 85, 61, 0.5);
+  outline-offset: 2px;
+}
+
+.tool-result {
+  border-top: 1px dashed var(--line);
+  padding-top: 13px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: #4a5347;
+  animation: viewIn 0.3s var(--ease) both;
+}
+.tool-result .res-strong { font-size: 15px; font-weight: 600; color: var(--ink-deep); margin-bottom: 4px; }
+.tool-result .res-line { color: #4a5347; }
+.tool-result .res-sub { font-size: 12.5px; color: var(--muted); }
+.tool-result.is-error { color: var(--clay-deep); border-top-color: rgba(200, 85, 61, 0.3); }
+.tool-result sup { font-size: 0.72em; }
+
+/* ---------- 每日名句 ---------- */
+.view-quotes {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: var(--cream);
+}
+.quotes-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: url("quotes-bg.png") center / cover no-repeat;
+  transform: scale(1.02);
+}
+.quotes-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(120% 90% at 50% 42%, rgba(242, 239, 229, 0.32), rgba(242, 239, 229, 0.6) 68%, rgba(242, 239, 229, 0.82) 100%),
+    linear-gradient(180deg, rgba(242, 239, 229, 0.5), rgba(242, 239, 229, 0.32));
+}
+.quotes-texture {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: var(--grain);
+  background-size: 160px 160px;
+  opacity: 0.16;
+  mix-blend-mode: multiply;
+}
+.quotes-pad {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: 100vh;
+  justify-content: center;
+  padding-top: 54px;
+  padding-bottom: 54px;
+}
+
+.quote-date {
+  align-self: flex-end;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 6px 14px;
+  border: 1px solid rgba(35, 52, 38, 0.14);
+  border-radius: 999px;
+  background: rgba(248, 245, 236, 0.7);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.quotes-stage {
+  position: relative;
+  max-width: 760px;
+  margin: 8px auto 0;
+  padding: 48px 48px 42px;
+  border-radius: 22px;
+  text-align: center;
+  overflow: hidden;
+  background: rgba(248, 245, 236, 0.74);
+  border: 1px solid rgba(35, 52, 38, 0.1);
+  box-shadow: 0 30px 60px -40px rgba(28, 42, 30, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.quotes-mark {
+  position: absolute;
+  top: 4px;
+  left: 22px;
+  font-family: var(--serif);
+  font-size: 96px;
+  line-height: 1;
+  color: var(--clay);
+  opacity: 0.16;
+}
+.quotes-text {
+  position: relative;
+  font-family: var(--serif);
+  font-size: clamp(24px, 3.6vw, 40px);
+  line-height: 1.55;
+  letter-spacing: 0.03em;
+  color: var(--ink-deep);
+  text-wrap: balance;
+  min-height: 1.6em;
+}
+.quotes-text.is-swap { animation: quoteSwap 0.55s var(--ease); }
+@keyframes quoteSwap {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.quotes-from {
+  margin-top: 20px;
+  font-size: 13px;
+  font-style: italic;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.quotes-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+.quotes-hint { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+
+@media (max-width: 900px) {
+  .view-quotes { min-height: auto; }
+  .quotes-pad { min-height: 0; padding-top: 34px; padding-bottom: 62px; justify-content: flex-start; }
+  .quotes-stage { padding: 34px 24px 30px; border-radius: 18px; }
+  .quotes-mark { font-size: 72px; left: 14px; }
+  .quote-date { align-self: flex-start; }
+}
+
+@media (max-width: 560px) {
+  .tool-fields { grid-template-columns: 1fr 1fr; }
+  .tool-fields.solo { grid-template-columns: 1fr; }
+  .quotes-actions { flex-direction: column; align-items: stretch; }
+  .quotes-actions .btn { width: 100%; }
+  .quotes-hint { text-align: center; }
+}
+
+@media (max-width: 430px) {
+  .whisper { align-self: stretch; justify-content: flex-end; font-size: 12px; }
+}
+

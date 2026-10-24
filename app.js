@@ -7,7 +7,7 @@
 
   /* ---------------- 基础工具 ---------------- */
   var KEY = 'zhixing.study.plan.v1';
-  var VIEWS = ['overview', 'daily', 'weekly', 'plan', 'settings'];
+  var VIEWS = ['overview', 'daily', 'weekly', 'plan', 'tools', 'quotes', 'settings'];
   var WEEKDAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   var SUBJECT_COLOR = { '语文': '#b05a41', '文综': '#a4803f', '英语': '#4a7368', '数理化': '#3f5a3f' };
   var RING_C = 2 * Math.PI * 58;
@@ -499,6 +499,235 @@
     $('#goalHint').textContent = new Date().getMonth() + 1 + '月目标 · 已完成 ' + doneCount + ' / ' + GOALS.length;
   }
 
+  /* ---------------- 渲染：每日名句 ---------------- */
+  var FAMOUS_QUOTES = [
+    { text: '不积跬步，无以至千里；不积小流，无以成江海。', from: '荀子《劝学》' },
+    { text: '路漫漫其修远兮，吾将上下而求索。', from: '屈原《离骚》' },
+    { text: '长风破浪会有时，直挂云帆济沧海。', from: '李白《行路难》' },
+    { text: '宝剑锋从磨砺出，梅花香自苦寒来。', from: '《警世贤文》' },
+    { text: '业精于勤，荒于嬉；行成于思，毁于随。', from: '韩愈《进学解》' },
+    { text: '纸上得来终觉浅，绝知此事要躬行。', from: '陆游《冬夜读书示子聿》' },
+    { text: '三更灯火五更鸡，正是男儿读书时。', from: '颜真卿《劝学》' },
+    { text: '黑发不知勤学早，白首方悔读书迟。', from: '颜真卿《劝学》' },
+    { text: '博观而约取，厚积而薄发。', from: '苏轼《稼说送张琥》' },
+    { text: '非淡泊无以明志，非宁静无以致远。', from: '诸葛亮《诫子书》' },
+    { text: '千淘万漉虽辛苦，吹尽狂沙始到金。', from: '刘禹锡《浪淘沙》' },
+    { text: '操千曲而后晓声，观千剑而后识器。', from: '刘勰《文心雕龙》' },
+    { text: '问渠那得清如许？为有源头活水来。', from: '朱熹《观书有感》' },
+    { text: '少年易老学难成，一寸光阴不可轻。', from: '朱熹《偶成》' },
+    { text: '锲而舍之，朽木不折；锲而不舍，金石可镂。', from: '荀子《劝学》' },
+    { text: '会当凌绝顶，一览众山小。', from: '杜甫《望岳》' },
+    { text: '读书破万卷，下笔如有神。', from: '杜甫《奉赠韦左丞丈二十二韵》' },
+    { text: '旧书不厌百回读，熟读深思子自知。', from: '苏轼《送安惇秀才失解西归》' },
+    { text: '莫等闲，白了少年头，空悲切。', from: '岳飞《满江红》' },
+    { text: '古之立大事者，不惟有超世之才，亦必有坚忍不拔之志。', from: '苏轼《晁错论》' },
+    { text: '立志宜思真品格，读书须尽苦功夫。', from: '阮元' },
+    { text: '学如逆水行舟，不进则退。', from: '《增广贤文》' }
+  ];
+
+  var quoteIndex = null;
+  var quoteDayKey = null;
+
+  function dailyQuoteIndex() {
+    var now = new Date();
+    var start = new Date(now.getFullYear(), 0, 0);
+    var doy = Math.floor((now - start) / 86400000);
+    return doy % FAMOUS_QUOTES.length;
+  }
+
+  function renderQuotes() {
+    var today = new Date();
+    var tk = dateKey(today);
+    if (quoteDayKey !== tk) { quoteDayKey = tk; quoteIndex = dailyQuoteIndex(); }
+    if (quoteIndex == null || quoteIndex < 0 || quoteIndex >= FAMOUS_QUOTES.length) {
+      quoteIndex = dailyQuoteIndex();
+    }
+
+    var dateEl = $('#quoteDate');
+    if (dateEl) dateEl.textContent = (today.getMonth() + 1) + '月' + today.getDate() + '日';
+    var q = FAMOUS_QUOTES[quoteIndex];
+    var textEl = $('#quoteBigText');
+    var fromEl = $('#quoteBigFrom');
+    if (textEl) textEl.textContent = q.text;
+    if (fromEl) fromEl.textContent = '—— ' + q.from;
+  }
+
+  function refreshQuote() {
+    var n = FAMOUS_QUOTES.length;
+    if (n > 1) {
+      var next = quoteIndex;
+      while (next === quoteIndex) next = Math.floor(Math.random() * n);
+      quoteIndex = next;
+    }
+    renderQuotes();
+    var textEl = $('#quoteBigText');
+    if (textEl && !reduced()) {
+      textEl.classList.remove('is-swap');
+      void textEl.offsetWidth;
+      textEl.classList.add('is-swap');
+    }
+    toast('换了一句');
+  }
+
+  /* ---------------- 渲染：学习工具 ---------------- */
+  function fmt(n, dec) {
+    if (!isFinite(n)) return '—';
+    var d = (dec == null) ? 4 : dec;
+    var v = parseFloat(Number(n).toFixed(d));
+    if (Object.is(v, -0)) v = 0;
+    return String(v);
+  }
+
+  function showResult(box, html, isError) {
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = html;
+    box.classList.toggle('is-error', !!isError);
+  }
+
+  function solveQuadratic() {
+    var box = $('#quadResult');
+    var a = parseFloat($('#qa').value);
+    var b = parseFloat($('#qb').value);
+    var c = parseFloat($('#qc').value);
+    if (!isFinite(a) || !isFinite(b) || !isFinite(c)) {
+      showResult(box, '<p class="res-strong">请输入 a、b、c 三个数字</p>', true);
+      return;
+    }
+    if (a === 0) {
+      if (b === 0) {
+        showResult(box, c === 0
+          ? '<p class="res-strong">任意 x 都成立（0 = 0）</p>'
+          : '<p class="res-strong">无解：' + fmt(c) + ' ≠ 0</p>', true);
+        return;
+      }
+      showResult(box,
+        '<p class="res-line res-sub">a = 0，退化为一次方程 ' + fmt(b) + 'x + ' + fmt(c) + ' = 0</p>' +
+        '<p class="res-strong">x = ' + fmt(-c / b) + '</p>');
+      return;
+    }
+
+    var D = b * b - 4 * a * c;
+    var html = '<p class="res-line">判别式 Δ = b² − 4ac = ' + fmt(D) + '</p>';
+    if (D > 0) {
+      var s = Math.sqrt(D);
+      html += '<p class="res-strong">两个不相等的实根</p>';
+      html += '<p class="res-line">x₁ = ' + fmt((-b + s) / (2 * a)) + '　　x₂ = ' + fmt((-b - s) / (2 * a)) + '</p>';
+    } else if (D === 0) {
+      html += '<p class="res-strong">两个相等的实根（重根）</p>';
+      html += '<p class="res-line">x = ' + fmt(-b / (2 * a)) + '</p>';
+    } else {
+      var re = -b / (2 * a), im = Math.sqrt(-D) / (2 * a);
+      html += '<p class="res-strong">没有实数根，是一对共轭复根</p>';
+      html += '<p class="res-line">x = ' + fmt(re) + ' ± ' + fmt(Math.abs(im)) + ' i</p>';
+    }
+    var vx = -b / (2 * a), vy = (4 * a * c - b * b) / (4 * a);
+    html += '<p class="res-line res-sub">顶点 (' + fmt(vx) + ', ' + fmt(vy) + ')　对称轴 x = ' + fmt(vx) +
+      '　开口' + (a > 0 ? '向上' : '向下') + '</p>';
+    showResult(box, html);
+  }
+
+  /* 目标分的单位：raw = 与得分同单位的卷面分；pct = 百分制 */
+  var scoreUnit = 'raw';
+
+  function calcScore() {
+    var box = $('#scoreResult');
+    var got = parseFloat($('#scGot').value);
+    var total = parseFloat($('#scTotal').value);
+    var target = parseFloat($('#scTarget').value);
+    if (!isFinite(got) || !isFinite(total) || total <= 0) {
+      showResult(box, '<p class="res-strong">请填写得分和满分（满分需大于 0）</p>', true);
+      return;
+    }
+    if (got < 0 || got > total) {
+      showResult(box, '<p class="res-strong">得分应在 0 到满分之间</p>', true);
+      return;
+    }
+    var pct = got / total * 100;
+    var level = pct >= 90 ? '优秀' : pct >= 80 ? '良好' : pct >= 60 ? '及格' : '不及格';
+    var html = '<p class="res-strong">百分制 ' + fmt(pct, 1) + ' 分 · ' + level + '</p>';
+    html += '<p class="res-line">' + fmt(got) + ' / ' + fmt(total) + ' 换算为 ' + fmt(pct, 1) + ' / 100</p>';
+
+    if (isFinite(target) && target >= 0) {
+      // 把目标统一换成两种刻度，避免拿卷面分去减百分制
+      var targetRaw = scoreUnit === 'raw' ? target : target / 100 * total;
+      var targetPct = scoreUnit === 'raw' ? target / total * 100 : target;
+      var cap = scoreUnit === 'raw' ? total : 100;
+
+      if (target > cap + 1e-9) {
+        showResult(box, html + '<p class="res-line res-sub">目标不能超过满分 ' +
+          fmt(cap) + (scoreUnit === 'raw' ? ' 分' : ' 分（百分制）') + '。</p>', true);
+        return;
+      }
+
+      var label = '目标 ' + fmt(targetPct, 1) + ' / 100' +
+        (scoreUnit === 'raw'
+          ? '（卷面 ' + fmt(targetRaw, 1) + ' / ' + fmt(total) + '）'
+          : '（卷面约 ' + fmt(targetRaw, 1) + ' / ' + fmt(total) + '）');
+      html += '<p class="res-line res-sub">' + label + '</p>';
+
+      // 统一在卷面刻度上比较，差值就是实实在在差几分
+      var diff = got - targetRaw;
+      if (diff >= -1e-9) {
+        html += '<p class="res-line res-sub">已达成' +
+          (diff > 1e-9
+            ? '，卷面比目标多 ' + fmt(diff, 1) + ' 分。'
+            : '，正好压线，稳住。') + '</p>';
+      } else {
+        html += '<p class="res-line res-sub">还差 ' + fmt(-diff, 1) + ' 分（卷面），百分制差 ' +
+          fmt(targetPct - pct, 1) + ' 分。</p>';
+        html += '<p class="res-line res-sub">下次卷面至少 ' + fmt(targetRaw, 1) + ' / ' + fmt(total) +
+          ' 就能达标。</p>';
+      }
+    }
+    showResult(box, html);
+  }
+
+  function isPrime(n) {
+    if (n < 2) return false;
+    if (n % 2 === 0) return n === 2;
+    for (var i = 3; i * i <= n; i += 2) if (n % i === 0) return false;
+    return true;
+  }
+
+  function factorize(n) {
+    var out = [];
+    var m = n;
+    for (var p = 2; p * p <= m; p++) {
+      if (m % p === 0) {
+        var e = 0;
+        while (m % p === 0) { m /= p; e++; }
+        out.push(e > 1 ? p + '<sup>' + e + '</sup>' : String(p));
+      }
+    }
+    if (m > 1) out.push(String(m));
+    return out;
+  }
+
+  function calcPrime() {
+    var box = $('#primeResult');
+    var n = parseInt($('#pn').value, 10);
+    if (!isFinite(n) || n < 2) {
+      showResult(box, '<p class="res-strong">请输入 2 或更大的整数</p>', true);
+      return;
+    }
+    if (n > 1000000000000) {
+      showResult(box, '<p class="res-strong">数字太大啦，换个小一点的吧</p>', true);
+      return;
+    }
+    if (isPrime(n)) {
+      showResult(box,
+        '<p class="res-strong">' + n + ' 是质数</p>' +
+        '<p class="res-line">它只能被 1 和它自己整除。</p>');
+    } else {
+      showResult(box,
+        '<p class="res-strong">' + n + ' 不是质数（合数）</p>' +
+        '<p class="res-line">' + n + ' = ' + factorize(n).join(' × ') + '</p>');
+    }
+  }
+
+  function renderTools() { /* 工具为静态结构，结果保留在 DOM 中 */ }
+
   /* ---------------- 渲染：设置 ---------------- */
   function renderSettings() {
     $('#nickname').value = state.nickname || '';
@@ -581,6 +810,8 @@
     else if (view === 'daily') renderDaily();
     else if (view === 'weekly') renderWeekly(true);
     else if (view === 'plan') renderPlan();
+    else if (view === 'tools') renderTools();
+    else if (view === 'quotes') renderQuotes();
     else if (view === 'settings') renderSettings();
     updateSideStreak();
   }
@@ -821,6 +1052,44 @@
       }, 700);
     });
   }
+
+  /* ---------------- 名句 / 工具交互 ---------------- */
+  var quoteRefreshBtn = $('#quoteRefresh');
+  if (quoteRefreshBtn) quoteRefreshBtn.addEventListener('click', refreshQuote);
+
+  var solveQuadBtn = $('#solveQuad');
+  if (solveQuadBtn) solveQuadBtn.addEventListener('click', solveQuadratic);
+  var calcScoreBtn = $('#calcScore');
+  if (calcScoreBtn) calcScoreBtn.addEventListener('click', calcScore);
+
+  // 目标分单位切换：切换后若已有结果，顺手重算一次
+  var scoreUnitBox = $('#scoreUnit');
+  if (scoreUnitBox) {
+    scoreUnitBox.addEventListener('click', function (e) {
+      var chip = e.target.closest ? e.target.closest('.unit-chip') : null;
+      if (!chip) return;
+      scoreUnit = chip.getAttribute('data-unit') === 'pct' ? 'pct' : 'raw';
+      Array.prototype.forEach.call(scoreUnitBox.querySelectorAll('.unit-chip'), function (el) {
+        var on = el === chip;
+        el.classList.toggle('is-on', on);
+        el.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      var box = $('#scoreResult');
+      if (box && !box.hidden) calcScore();
+    });
+  }
+  var calcPrimeBtn = $('#calcPrime');
+  if (calcPrimeBtn) calcPrimeBtn.addEventListener('click', calcPrime);
+
+  // 在输入框里按回车也能直接计算
+  [['#qa', solveQuadratic], ['#qb', solveQuadratic], ['#qc', solveQuadratic],
+   ['#scGot', calcScore], ['#scTotal', calcScore], ['#scTarget', calcScore],
+   ['#pn', calcPrime]].forEach(function (pair) {
+    var el = $(pair[0]);
+    if (el) el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); pair[1](); }
+    });
+  });
 
   /* ---------------- 尺寸变化 ---------------- */
   var resizeTimer = null;
