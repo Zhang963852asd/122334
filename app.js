@@ -60,11 +60,13 @@
       startDate: dateKey(new Date()),
       settings: { dailyReminder: true, weekendReminder: true },
       checkins: {},
+      checkinAt: {},
       reviews: {},
       goals: {},
       mistakes: [],
       quoteNotes: {},
       favorites: [],
+      favAt: 0,
       mkTrash: [],
       updatedAt: 0,
       resetAt: 0
@@ -80,6 +82,7 @@
       startDate: p.startDate || base.startDate,
       settings: Object.assign({}, base.settings, p.settings || {}),
       checkins: p.checkins && typeof p.checkins === 'object' ? p.checkins : {},
+      checkinAt: p.checkinAt && typeof p.checkinAt === 'object' ? p.checkinAt : {},
       reviews: p.reviews && typeof p.reviews === 'object' ? p.reviews : {},
       goals: p.goals && typeof p.goals === 'object' ? p.goals : {},
       mistakes: Array.isArray(p.mistakes) ? p.mistakes.filter(function (m) {
@@ -98,6 +101,7 @@
       }) : [],
       quoteNotes: p.quoteNotes && typeof p.quoteNotes === 'object' ? p.quoteNotes : {},
       favorites: Array.isArray(p.favorites) ? p.favorites.filter(function (t) { return typeof t === 'string'; }) : [],
+      favAt: typeof p.favAt === 'number' && isFinite(p.favAt) ? p.favAt : 0,
       mkTrash: Array.isArray(p.mkTrash) ? p.mkTrash.filter(function (t) { return typeof t === 'string'; }) : [],
       updatedAt: typeof p.updatedAt === 'number' && isFinite(p.updatedAt) ? p.updatedAt : 0,
       resetAt: typeof p.resetAt === 'number' && isFinite(p.resetAt) ? p.resetAt : 0
@@ -471,7 +475,8 @@
 
     // 只有切到新的一周时才回填，避免切页面时把没保存的草稿冲掉
     if (resetFields && reviewWeekKey !== info.key) {
-      var saved = state.reviews[info.key] || {};
+      var savedRaw = state.reviews[info.key];
+      var saved = (savedRaw && !savedRaw.del) ? savedRaw : {};
       $('#rv1').value = saved.t1 || '';
       $('#rv2').value = saved.t2 || '';
       $('#rv3').value = saved.t3 || '';
@@ -482,7 +487,9 @@
 
     var history = $('#reviewHistory');
     var empty = $('#reviewEmpty');
-    var keys = Object.keys(state.reviews).filter(function (k) { return /^\d{4}-W\d+$/.test(k); });
+    var keys = Object.keys(state.reviews).filter(function (k) {
+      return /^\d{4}-W\d+$/.test(k) && !(state.reviews[k] && state.reviews[k].del);
+    });
     keys.sort(function (a, b) {
       var A = weekLabel(a), B = weekLabel(b);
       return (Number(B.year) * 100 + Number(B.week)) - (Number(A.year) * 100 + Number(A.week));
@@ -891,6 +898,7 @@
       state.favorites.splice(i, 1);
       toast('已取消收藏');
     }
+    state.favAt = Date.now();
     save();
     updateFavBtn(t);
     renderFavorites();
@@ -1440,6 +1448,9 @@
 
     if (arr.length) state.checkins[k] = arr;
     else delete state.checkins[k];
+    // 记录这一天清单的最后修改时间：同步时按它决定以哪一端为准
+    if (!state.checkinAt || typeof state.checkinAt !== 'object') state.checkinAt = {};
+    state.checkinAt[k] = Date.now();
     save();
 
     li.classList.toggle('is-done', nowDone);
@@ -1571,7 +1582,8 @@
       text: '这段文字会被永久删除，且无法恢复。',
       confirmText: '删除',
       onConfirm: function () {
-        delete state.reviews[key];
+        // 留一条 del 标记参与同步：直接 delete 的话，另一台设备会把旧复盘合并回来
+        state.reviews[key] = { t1: '', t2: '', t3: '', at: Date.now(), del: true };
         save();
         reviewWeekKey = null;
         renderWeekly(true);
@@ -1703,6 +1715,7 @@
     var i = state.favorites.indexOf(t);
     if (i !== -1) {
       state.favorites.splice(i, 1);
+      state.favAt = Date.now();
       save();
       toast('已取消收藏');
       renderFavorites();
@@ -1876,17 +1889,33 @@
     });
   }
 
-  function mergeCheckins(a, b) {
-    var out = {};
-    eachKey(a, b, function (k) {
-      var list = [];
-      [a, b].forEach(function (m) {
-        var arr = m && Array.isArray(m[k]) ? m[k] : [];
-        arr.forEach(function (id) { if (list.indexOf(id) < 0) list.push(id); });
-      });
-      if (list.length) out[k] = list;
+  // 打卡：同一天以「最后一次修改」为准。
+  // （早先用并集，导致取消勾选永远传不出去——同步一拉就又被加回来）
+  function mergeCheckins(localS, remoteS) {
+    var a = localS.checkins || {}, b = remoteS.checkins || {};
+    var atA = localS.checkinAt || {}, atB = remoteS.checkinAt || {};
+    var out = {}, outAt = {};
+    var keys = {};
+    [a, b, atA, atB].forEach(function (m) {
+      Object.keys(m || {}).forEach(function (k) { keys[k] = 1; });
     });
-    return out;
+    Object.keys(keys).forEach(function (k) {
+      var ta = atA[k] || 0, tb = atB[k] || 0;
+      var arr = (ta >= tb) ? a[k] : b[k];
+      if (Array.isArray(arr) && arr.length) out[k] = arr.slice();
+      outAt[k] = Math.max(ta, tb);
+    });
+    return { checkins: out, checkinAt: outAt };
+  }
+
+  // 收藏：整份列表按最后一次修改取舍（并集同样会让「取消收藏」失效）
+  function mergeFavorites(localS, remoteS) {
+    var la = localS.favAt || 0, rb = remoteS.favAt || 0;
+    var list = (rb > la) ? remoteS.favorites : localS.favorites;
+    return {
+      favorites: Array.isArray(list) ? list.slice() : [],
+      favAt: Math.max(la, rb)
+    };
   }
 
   function mergeReviews(a, b) {
@@ -1951,16 +1980,20 @@
     var mistakes = mergeMistakes(localS.mistakes, remoteS.mistakes).filter(function (m) {
       return trash.indexOf(m.id) < 0;
     });
+    var ck = mergeCheckins(localS, remoteS);
+    var fv = mergeFavorites(localS, remoteS);
     return {
       nickname: newer.nickname || '',
       startDate: newer.startDate || localS.startDate,
       settings: Object.assign({}, localS.settings, newer.settings),
       goals: Object.assign({}, localS.goals, newer.goals),
-      checkins: mergeCheckins(localS.checkins, remoteS.checkins),
+      checkins: ck.checkins,
+      checkinAt: ck.checkinAt,
       reviews: mergeReviews(localS.reviews, remoteS.reviews),
       mistakes: mistakes,
       quoteNotes: mergeNotes(localS.quoteNotes, remoteS.quoteNotes),
-      favorites: unionList(localS.favorites, remoteS.favorites),
+      favorites: fv.favorites,
+      favAt: fv.favAt,
       mkTrash: trash,
       updatedAt: Math.max(localS.updatedAt || 0, remoteS.updatedAt || 0),
       resetAt: Math.max(localS.resetAt || 0, remoteS.resetAt || 0)
