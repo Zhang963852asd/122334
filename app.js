@@ -2043,6 +2043,10 @@
     if (/User already registered/i.test(m)) return '这个邮箱已注册，直接点登录';
     if (/Password should be at least/i.test(m)) return '密码太短了（至少 6 位）';
     if (/Email not confirmed/i.test(m)) return '邮箱还没验证，去 Supabase 关掉 Confirm email';
+    if (/Auth session missing|session_not_found|Invalid Refresh Token|JWT expired/i.test(m)) return '登录状态过期了，退出后重新登录';
+    if (/should be different|different from the old/i.test(m)) return '新密码不能和旧密码一样';
+    if (/weak|pwned/i.test(m)) return '这个密码太弱，换一个复杂点的';
+    if (/rate limit|too many requests/i.test(m)) return '操作太频繁，等一下再试';
     if (/Failed to fetch|NetworkError|load failed/i.test(m)) return '网络连不上，稍后再试';
     if (/JWT|apikey|Invalid API key/i.test(m)) return '密钥无效';
     return m || '未知错误';
@@ -2148,6 +2152,7 @@
     var done = function () {
       syncUser = null;
       syncStatus = 'idle';
+      closePwBox();
       renderSyncUI();
       toast('已退出登录，本机数据保留');
     };
@@ -2199,6 +2204,52 @@
     });
   }
 
+  function closePwBox() {
+    var box = $('#syncPwBox');
+    var toggle = $('#syncPwToggle');
+    var m1 = $('#syncNewPass');
+    var m2 = $('#syncNewPass2');
+    var msg = $('#syncPwMsg');
+    if (box) box.hidden = true;
+    if (toggle) {
+      toggle.textContent = '修改密码';
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+    if (m1) m1.value = '';
+    if (m2) m2.value = '';
+    if (msg) msg.textContent = '';
+  }
+
+  function saveNewPassword() {
+    var p1 = $('#syncNewPass');
+    var p2 = $('#syncNewPass2');
+    var msg = $('#syncPwMsg');
+    var v1 = p1 ? p1.value : '';
+    var v2 = p2 ? p2.value : '';
+
+    if (!cloud || !syncUser) {
+      if (msg) msg.textContent = '还没登录，先登录再改密码。';
+      return;
+    }
+    if (v1.length < 6) {
+      if (msg) msg.textContent = '新密码至少 6 位。';
+      return;
+    }
+    if (v1 !== v2) {
+      if (msg) msg.textContent = '两次输入不一致，再对一遍。';
+      return;
+    }
+    if (msg) msg.textContent = '正在保存…';
+
+    Promise.resolve(cloud.auth.updateUser({ password: v1 })).then(function (res) {
+      if (res && res.error) throw res.error;
+      closePwBox();
+      toast('密码已更新，下次用新密码登录');
+    }).catch(function (err) {
+      if (msg) msg.textContent = describeCloudError(err);
+    });
+  }
+
   function bindSyncUI() {
     var loginBtn = $('#syncLogin');
     var signupBtn = $('#syncSignup');
@@ -2216,6 +2267,29 @@
     });
     if (passEl) passEl.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); authSubmit('signin'); }
+    });
+
+    var pwToggle = $('#syncPwToggle');
+    var pwSave = $('#syncPwSave');
+    var pwCancel = $('#syncPwCancel');
+    if (pwToggle) pwToggle.addEventListener('click', function () {
+      var box = $('#syncPwBox');
+      if (!box) return;
+      if (box.hidden) {
+        box.hidden = false;
+        pwToggle.textContent = '收起';
+        pwToggle.setAttribute('aria-expanded', 'true');
+        var f = $('#syncNewPass');
+        if (f) f.focus();
+      } else {
+        closePwBox();
+      }
+    });
+    if (pwSave) pwSave.addEventListener('click', saveNewPassword);
+    if (pwCancel) pwCancel.addEventListener('click', closePwBox);
+    var np2 = $('#syncNewPass2');
+    if (np2) np2.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); saveNewPassword(); }
     });
 
     window.addEventListener('online', function () { if (syncUser) syncNow('online'); });

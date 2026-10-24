@@ -457,7 +457,27 @@
             <div class="sync-actions">
               <button class="btn btn-solid btn-sm" type="button" id="syncNow">立即同步</button>
               <button class="btn btn-ghost btn-sm" type="button" id="syncLogout">退出登录</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="syncPwToggle" aria-expanded="false" aria-controls="syncPwBox">修改密码</button>
             </div>
+
+            <div class="sync-pw" id="syncPwBox" hidden>
+              <div class="sync-form">
+                <label class="mk-field" for="syncNewPass">
+                  <span>新密码（至少 6 位）</span>
+                  <input id="syncNewPass" type="password" autocomplete="new-password" maxlength="72" placeholder="••••••">
+                </label>
+                <label class="mk-field" for="syncNewPass2">
+                  <span>再输一次</span>
+                  <input id="syncNewPass2" type="password" autocomplete="new-password" maxlength="72" placeholder="••••••">
+                </label>
+              </div>
+              <div class="sync-actions">
+                <button class="btn btn-solid btn-sm" type="button" id="syncPwSave">保存新密码</button>
+                <button class="btn btn-ghost btn-sm" type="button" id="syncPwCancel">取消</button>
+              </div>
+              <p class="sync-hint" id="syncPwMsg"></p>
+            </div>
+
             <p class="sync-hint">两台设备同时离线修改时，按记录逐条合并：打卡、复盘、错题、笔记取并集，昵称与目标取较晚的一份。</p>
           </div>
         </div>
