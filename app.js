@@ -7,7 +7,7 @@
 
   /* ---------------- 基础工具 ---------------- */
   var KEY = 'zhixing.study.plan.v1';
-  var VIEWS = ['overview', 'daily', 'weekly', 'plan', 'tools', 'quotes', 'settings'];
+  var VIEWS = ['overview', 'daily', 'weekly', 'plan', 'tools', 'mistakes', 'quotes', 'favorites', 'settings'];
   var WEEKDAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   var SUBJECT_COLOR = { '语文': '#b05a41', '文综': '#a4803f', '英语': '#4a7368', '数理化': '#3f5a3f' };
   var RING_C = 2 * Math.PI * 58;
@@ -61,7 +61,10 @@
       settings: { dailyReminder: true, weekendReminder: true },
       checkins: {},
       reviews: {},
-      goals: {}
+      goals: {},
+      mistakes: [],
+      quoteNotes: {},
+      favorites: []
     };
   }
 
@@ -85,7 +88,21 @@
         settings: Object.assign({}, base.settings, p.settings || {}),
         checkins: p.checkins && typeof p.checkins === 'object' ? p.checkins : {},
         reviews: p.reviews && typeof p.reviews === 'object' ? p.reviews : {},
-        goals: p.goals && typeof p.goals === 'object' ? p.goals : {}
+        goals: p.goals && typeof p.goals === 'object' ? p.goals : {},
+        mistakes: Array.isArray(p.mistakes) ? p.mistakes.filter(function (m) {
+          return m && typeof m === 'object' && typeof m.title === 'string' && m.title.trim();
+        }).slice(0, 500).map(function (m) {
+          return {
+            id: typeof m.id === 'string' && m.id ? m.id : 'mk-' + Math.random().toString(36).slice(2, 9),
+            subject: SUBJECT_COLOR[m.subject] ? m.subject : '语文',
+            title: String(m.title).slice(0, 120),
+            reason: typeof m.reason === 'string' ? m.reason.slice(0, 400) : '',
+            done: !!m.done,
+            at: typeof m.at === 'number' && isFinite(m.at) ? m.at : Date.now()
+          };
+        }) : [],
+        quoteNotes: p.quoteNotes && typeof p.quoteNotes === 'object' ? p.quoteNotes : {},
+        favorites: Array.isArray(p.favorites) ? p.favorites.filter(function (t) { return typeof t === 'string'; }) : []
       };
     } catch (e) {
       return base;
@@ -343,11 +360,11 @@
 
   /* ---------------- 渲染：每日打卡 ---------------- */
   var QUOTES = [
-    { text: '把一小时的坚持，交给时间。', from: '知行手记' },
-    { text: '进步不是一口气跑完的，是每天多走一小步。', from: '知行手记' },
-    { text: '语文的分，藏在每天那十五分钟里。', from: '知行手记' },
-    { text: '慢一点，但不要停。', from: '知行手记' },
-    { text: '所谓天赋，不过是重复到不再费力。', from: '知行手记' }
+    { note: '进步是慢慢攒出来的，今天的一小步，终会连成千里。', text: '把一小时的坚持，交给时间。', from: '知行手记' },
+    { note: '求索的路很长，但每走一步都算数。', text: '进步不是一口气跑完的，是每天多走一小步。', from: '知行手记' },
+    { note: '相信会有乘风破浪的那天，先别停下桨。', text: '语文的分，藏在每天那十五分钟里。', from: '知行手记' },
+    { note: '好东西都是磨出来的，别怕当下的辛苦。', text: '慢一点，但不要停。', from: '知行手记' },
+    { note: '精与荒、成与毁，差的就是那点坚持。', text: '所谓天赋，不过是重复到不再费力。', from: '知行手记' }
   ];
 
   function renderDaily() {
@@ -499,34 +516,290 @@
     $('#goalHint').textContent = new Date().getMonth() + 1 + '月目标 · 已完成 ' + doneCount + ' / ' + GOALS.length;
   }
 
+  /* ---------------- 渲染：错题本 ---------------- */
+  var mkSubject = '语文';
+  var mkFilter = 'all';
+
+  function mkSorted() {
+    return (state.mistakes || []).slice().sort(function (a, b) { return b.at - a.at; });
+  }
+
+  function mkItemHTML(m) {
+    var color = SUBJECT_COLOR[m.subject] || '#3f5a3f';
+    var label = (m.done ? '撤销弄懂：' : '标记已弄懂：') + m.title;
+    return '' +
+      '<li class="mk-item' + (m.done ? ' is-done' : '') + '" data-id="' + esc(m.id) + '" style="--mk:' + color + '">' +
+        '<button class="mk-check" type="button" aria-pressed="' + (m.done ? 'true' : 'false') + '" aria-label="' + esc(label) + '">' +
+          '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.4 12 13 4.6"/></svg>' +
+        '</button>' +
+        '<div class="mk-body">' +
+          '<div class="mk-head">' +
+            '<span class="tag tag-subject" style="--sc:' + color + '">' + esc(m.subject) + '</span>' +
+            '<h3 class="mk-title">' + esc(m.title) + '</h3>' +
+          '</div>' +
+          (m.reason ? '<p class="mk-reason">' + esc(m.reason) + '</p>' : '') +
+          '<p class="mk-meta"><span class="mk-state">' + (m.done ? '已弄懂' : '待弄懂') + '</span>' +
+            '<span class="mk-dot" aria-hidden="true">·</span>记录于 ' + shortTime(m.at) + '</p>' +
+        '</div>' +
+        '<button class="mk-del" type="button" data-del-mk="' + esc(m.id) + '" aria-label="删除这道错题">×</button>' +
+      '</li>';
+  }
+
+  function renderMistakes() {
+    var all = mkSorted();
+    var open = all.filter(function (m) { return !m.done; }).length;
+
+    var countEl = $('#mkCount');
+    if (countEl) countEl.textContent = '待弄懂 ' + open + ' 道';
+
+    var statEl = $('#mkStat');
+    if (statEl) statEl.textContent = all.length
+      ? '共 ' + all.length + ' 道 · 已弄懂 ' + (all.length - open) + ' 道'
+      : '';
+
+    var shown = all.filter(function (m) {
+      if (mkFilter === 'open') return !m.done;
+      if (mkFilter === 'done') return m.done;
+      return true;
+    });
+
+    var list = $('#mkList');
+    if (list) list.innerHTML = shown.map(mkItemHTML).join('');
+
+    var empty = $('#mkEmpty');
+    if (empty) {
+      empty.hidden = shown.length > 0;
+      empty.textContent = all.length
+        ? '这个筛选下还没有错题，换个条件看看。'
+        : '还没有错题。今天做错的题，挑一道记下来，比再刷十道有用。';
+    }
+
+    $$('#mkFilters .unit-chip').forEach(function (b) {
+      var on = b.getAttribute('data-filter') === mkFilter;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    $$('#mkSubjects .unit-chip').forEach(function (b) {
+      var on = b.getAttribute('data-subject') === mkSubject;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function addMistake() {
+    var titleEl = $('#mkTitle');
+    if (!titleEl) return;
+    var reasonEl = $('#mkReason');
+    var title = titleEl.value.trim();
+    if (!title) {
+      toast('先写一句题目或考点');
+      titleEl.focus();
+      return;
+    }
+    if (!Array.isArray(state.mistakes)) state.mistakes = [];
+    state.mistakes.push({
+      id: 'mk-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
+      subject: SUBJECT_COLOR[mkSubject] ? mkSubject : '语文',
+      title: title.slice(0, 120),
+      reason: reasonEl ? reasonEl.value.trim().slice(0, 400) : '',
+      done: false,
+      at: Date.now()
+    });
+    save();
+    titleEl.value = '';
+    if (reasonEl) reasonEl.value = '';
+    mkFilter = 'all';
+    renderMistakes();
+    toast('已加入错题本，共 ' + state.mistakes.length + ' 道');
+    titleEl.focus();
+  }
+
+  function toggleMistake(id) {
+    var m = (state.mistakes || []).filter(function (x) { return x.id === id; })[0];
+    if (!m) return;
+    m.done = !m.done;
+    save();
+    renderMistakes();
+    toast(m.done ? '已标记弄懂，可以移出清单了' : '已改回待弄懂');
+  }
+
+  function deleteMistake(id) {
+    var before = (state.mistakes || []).length;
+    state.mistakes = (state.mistakes || []).filter(function (x) { return x.id !== id; });
+    if (state.mistakes.length === before) return;
+    save();
+    renderMistakes();
+    toast('已删除这道错题');
+  }
+
   /* ---------------- 渲染：每日名句 ---------------- */
   var FAMOUS_QUOTES = [
-    { text: '不积跬步，无以至千里；不积小流，无以成江海。', from: '荀子《劝学》' },
-    { text: '路漫漫其修远兮，吾将上下而求索。', from: '屈原《离骚》' },
-    { text: '长风破浪会有时，直挂云帆济沧海。', from: '李白《行路难》' },
-    { text: '宝剑锋从磨砺出，梅花香自苦寒来。', from: '《警世贤文》' },
-    { text: '业精于勤，荒于嬉；行成于思，毁于随。', from: '韩愈《进学解》' },
-    { text: '纸上得来终觉浅，绝知此事要躬行。', from: '陆游《冬夜读书示子聿》' },
-    { text: '三更灯火五更鸡，正是男儿读书时。', from: '颜真卿《劝学》' },
-    { text: '黑发不知勤学早，白首方悔读书迟。', from: '颜真卿《劝学》' },
-    { text: '博观而约取，厚积而薄发。', from: '苏轼《稼说送张琥》' },
-    { text: '非淡泊无以明志，非宁静无以致远。', from: '诸葛亮《诫子书》' },
-    { text: '千淘万漉虽辛苦，吹尽狂沙始到金。', from: '刘禹锡《浪淘沙》' },
-    { text: '操千曲而后晓声，观千剑而后识器。', from: '刘勰《文心雕龙》' },
-    { text: '问渠那得清如许？为有源头活水来。', from: '朱熹《观书有感》' },
-    { text: '少年易老学难成，一寸光阴不可轻。', from: '朱熹《偶成》' },
-    { text: '锲而舍之，朽木不折；锲而不舍，金石可镂。', from: '荀子《劝学》' },
-    { text: '会当凌绝顶，一览众山小。', from: '杜甫《望岳》' },
-    { text: '读书破万卷，下笔如有神。', from: '杜甫《奉赠韦左丞丈二十二韵》' },
-    { text: '旧书不厌百回读，熟读深思子自知。', from: '苏轼《送安惇秀才失解西归》' },
-    { text: '莫等闲，白了少年头，空悲切。', from: '岳飞《满江红》' },
-    { text: '古之立大事者，不惟有超世之才，亦必有坚忍不拔之志。', from: '苏轼《晁错论》' },
-    { text: '立志宜思真品格，读书须尽苦功夫。', from: '阮元' },
-    { text: '学如逆水行舟，不进则退。', from: '《增广贤文》' }
-  ];
+    { note: '看懂和做到之间，还差一次亲自动手。', text: '不积跬步，无以至千里；不积小流，无以成江海。', from: '荀子《劝学》' },
+    { note: '少年时多用的功，老了不会辜负你。', text: '路漫漫其修远兮，吾将上下而求索。', from: '屈原《离骚》' },
+    { note: '现在偷的懒，以后都要补回来。', text: '长风破浪会有时，直挂云帆济沧海。', from: '李白《行路难》' },
+    { note: '先广博地看，再慢慢地取，厚积才能薄发。', text: '宝剑锋从磨砺出，梅花香自苦寒来。', from: '《警世贤文》' },
+    { note: '心静得下来，才看得清自己要去哪。', text: '业精于勤，荒于嬉；行成于思，毁于随。', from: '韩愈《进学解》' },
+    { note: '熬过辛苦，沙里才能淘出金子。', text: '纸上得来终觉浅，绝知此事要躬行。', from: '陆游《冬夜读书示子聿》' },
+    { note: '做得多了，自然就懂了门道。', text: '三更灯火五更鸡，正是男儿读书时。', from: '颜真卿《劝学》' },
+    { note: '心要常新，得像活水一样不断补进东西。', text: '黑发不知勤学早，白首方悔读书迟。', from: '颜真卿《劝学》' },
+    { note: '时间不等人，最经不起浪费的就是光阴。', text: '博观而约取，厚积而薄发。', from: '苏轼《稼说送张琥》' },
+    { note: '能不能成，往往就看能不能再多坚持一下。', text: '非淡泊无以明志，非宁静无以致远。', from: '诸葛亮《诫子书》' },
+    { note: '站得高一点，眼前的难就小一点。', text: '千淘万漉虽辛苦，吹尽狂沙始到金。', from: '刘禹锡《浪淘沙》' },
+    { note: '读得够多，写和说都会顺起来。', text: '操千曲而后晓声，观千剑而后识器。', from: '刘勰《文心雕龙》' },
+    { note: '好书值得反复读，每读一遍都有新东西。', text: '问渠那得清如许？为有源头活水来。', from: '朱熹《观书有感》' },
+    { note: '别等头发白了才后悔当初没用力。', text: '少年易老学难成，一寸光阴不可轻。', from: '朱熹《偶成》' },
+    { note: '成大事，光有才不够，还得有股韧劲。', text: '锲而舍之，朽木不折；锲而不舍，金石可镂。', from: '荀子《劝学》' },
+    { note: '读书先学做人，下苦功才有真本事。', text: '会当凌绝顶，一览众山小。', from: '杜甫《望岳》' },
+    { note: '不往前，就往后，学习没有原地踏步。', text: '读书破万卷，下笔如有神。', from: '杜甫《奉赠韦左丞丈二十二韵》' },
+    { note: '学、问、思、辨、行，五件事一个都不能少。', text: '旧书不厌百回读，熟读深思子自知。', from: '苏轼《送安惇秀才失解西归》' },
+    { note: '人不学不成器，打磨自己的过程虽然疼，但必要。', text: '莫等闲，白了少年头，空悲切。', from: '岳飞《满江红》' },
+    { note: '聪明又好学，还肯向不如自己的人请教，最难得。', text: '古之立大事者，不惟有超世之才，亦必有坚忍不拔之志。', from: '苏轼《晁错论》' },
+    { note: '光学不想是迷糊，光想不学是危险。', text: '立志宜思真品格，读书须尽苦功夫。', from: '阮元' },
+    { note: '把旧知识再看一遍，常有新发现。', text: '学如逆水行舟，不进则退。', from: '《增广贤文》' },
+    { note: '喜欢不如热爱，热爱才走得最远。', text: '博学之，审问之，慎思之，明辨之，笃行之。', from: '《中庸》' },
+    { note: '身边谁都有可学的地方，别端着。', text: '玉不琢，不成器；人不学，不知道。', from: '《礼记·学记》' },
+    { note: '勤是唯一的捷径，苦是必经的路。', text: '敏而好学，不耻下问。', from: '《论语》' },
+    { note: '真读进去了，连春天过去都没察觉。', text: '学而不思则罔，思而不学则殆。', from: '《论语》' },
+    { note: '年轻时下功夫，是一辈子的事。', text: '温故而知新，可以为师矣。', from: '《论语》' },
+    { note: '好书像老朋友，喜怒哀乐都在身边。', text: '知之者不如好之者，好之者不如乐之者。', from: '《论语》' },
+    { note: '用的时候才恨读得少，别等那天。', text: '三人行，必有我师焉。', from: '《论语》' },
+    { note: '给自己一点风，也敢往高处去。', text: '书山有路勤为径，学海无涯苦作舟。', from: '韩愈（集句）' },
+    { note: '志向不坚定，聪明也白搭；说话不守信，做事难成。', text: '读书不觉已春深，一寸光阴一寸金。', from: '王贞白《白鹿洞》' },
+    { note: '再大的东西，也从一点点开始。', text: '少年辛苦终身事，莫向光阴惰寸功。', from: '杜荀鹤《题弟侄书堂》' },
+    { note: '哪有什么天才，不过是把别人玩的时间用在正事上。', text: '书卷多情似故人，晨昏忧乐每相亲。', from: '于谦《观书》' },
+    { note: '路是走出来的，你走了，后来的人就有路了。', text: '书到用时方恨少，事非经过不知难。', from: '《增广贤文》' },
+    { note: '不是没时间，是没去挤。', text: '大鹏一日同风起，扶摇直上九万里。', from: '李白《上李邕》' },
+    { note: '别被周围冷却了，自己往上走就好。', text: '志不强者智不达，言不信者行不果。', from: '《墨子》' },
+    { note: '聪明人更该下笨功夫，别耍小聪明。', text: '合抱之木，生于毫末；九层之台，起于累土。', from: '《老子》' }
+  ,
+    { note: '别人的热闹是别人的，守住自己的安静。', text: '哪里有天才，我是把别人喝咖啡的工夫都用在工作上了。', from: '鲁迅' },
+    { note: '想得再多，不如先读两页书。', text: '其实地上本没有路，走的人多了，也便成了路。', from: '鲁迅' },
+    { note: '经历多了才懂，最珍贵的原来是内心的安稳。', text: '时间就像海绵里的水，只要愿挤，总还是有的。', from: '鲁迅' },
+    { note: '别嫌进步小，往前挪一寸就有一寸的欢喜。', text: '愿中国青年都摆脱冷气，只是向上走。', from: '鲁迅' },
+    { note: '敢想，也要肯去一点点求证。', text: '越是聪明人，越要懂得下笨功夫。', from: '钱钟书' },
+    { note: '担得起责任，才尝得到其中的踏实。', text: '窗外的繁华不是我的繁华。', from: '钱钟书' },
+    { note: '成大事业，都要熬过那几重孤独的关口。', text: '你的问题主要在于读书不多而想得太多。', from: '杨绛' },
+    { note: '心定，就不容易被外物牵着走。', text: '我们曾如此渴望命运的波澜，到最后才发现，人生最曼妙的风景，竟是内心的淡定与从容。', from: '杨绛' },
+    { note: '光鲜背后，都是没人看见的泪和汗。', text: '怕什么真理无穷，进一寸有一寸的欢喜。', from: '胡适' },
+    { note: '读书读出的，是一种从容的气质。', text: '大胆地假设，小心地求证。', from: '胡适' },
+    { note: '真懂了，自然会去做；做了，才叫真懂。', text: '人生须知负责任的苦处，才能知道尽责任的乐趣。', from: '梁启超' },
+    { note: '读书人心里，得装着比自己更大的事。', text: '古今之成大事业、大学问者，必经过三种之境界。', from: '王国维' },
+    { note: '真话可以不全说，但假的绝不说，这是底线。', text: '不乱于心，不困于情，不畏将来，不念过往。', from: '丰子恺' },
+    { note: '一天里，读书、做人、做事要一起长。', text: '成功的花，人们只惊羡她现时的明艳！然而当初她的芽儿，浸透了奋斗的泪泉。', from: '冰心' },
+    { note: '思想独立、精神自由，是最要紧的。', text: '读书使人得到一种优雅和风味。', from: '林语堂' },
+    { note: '说得漂亮不如做得漂亮。', text: '知之真切笃实处即是行，行之明觉精察处即是知。', from: '王阳明' },
+    { note: '慢一点没关系，别停就好。', text: '为天地立心，为生民立命，为往圣继绝学，为万世开太平。', from: '张载' },
+    { note: '摔了七次，第八次还爬起来。', text: '假话全不说，真话不全说。', from: '季羡林' },
+    { note: '开始，就是最难也最关键的一步。', text: '一天之内，须于读书、做人、做事三者兼顾。', from: '钱穆' },
+    { note: '优秀不是一次表现，是日复一日。', text: '独立之精神，自由之思想。', from: '陈寅恪' },
+    { note: '你重复做什么，你就成为什么。', text: 'Well done is better than well said.', from: 'Benjamin Franklin' },
+    { note: '每个高手，都曾是啥也不会的新手。', text: 'It does not matter how slowly you go as long as you do not stop.', from: 'Confucius' },
+    { note: '敢做梦，也敢搞砸，才有真成长。', text: 'Fall seven times, stand up eight.', from: 'Japanese proverb' },
+    { note: '别光想成功，先想想自己能给别人什么。', text: 'The secret of getting ahead is getting started.', from: 'Mark Twain' },
+    { note: '大成果，都是小努力一天天堆出来的。', text: 'Quality is not an act, it is a habit.', from: 'Aristotle' },
+    { note: '用你手头有的，做你能做的。', text: 'We are what we repeatedly do.', from: 'Aristotle' },
+    { note: '学东西不会累坏脑子，尽管去学。', text: 'The expert in anything was once a beginner.', from: '佚名' },
+    { note: '教育，是能改变世界的东西。', text: 'Dream big and dare to fail.', from: 'Norman Vaughan' },
+    { note: '学到的东西，谁也抢不走。', text: 'Strive not to be a success, but rather to be of value.', from: 'Albert Einstein' },
+    { note: '像明天就走那样去活，像永远活着那样去学。', text: 'Success is the sum of small efforts repeated day in and day out.', from: 'Robert Collier' },
+    { note: '知识，就是力量。', text: 'Do what you can, with what you have, where you are.', from: 'Theodore Roosevelt' },
+    { note: '87 岁了还在学，你我也别停。', text: 'Learning never exhausts the mind.', from: 'Leonardo da Vinci' },
+    { note: '值得去的地方，都没有捷径。', text: 'Education is the most powerful weapon which you can use to change the world.', from: 'Nelson Mandela' },
+    { note: '每天一小步，久了就是大变化。', text: 'The beautiful thing about learning is that no one can take it away from you.', from: 'B.B. King' },
+    { note: '自律，是目标和达成之间的桥。', text: 'Live as if you were to die tomorrow. Learn as if you were to live forever.', from: 'Gandhi' },
+    { note: '动力让你开始，习惯让你坚持。', text: 'Knowledge is power.', from: 'Francis Bacon' },
+    { note: '不必一开始就厉害，先开始才能变厉害。', text: 'I am still learning.', from: 'Michelangelo' },
+    { note: '越努力，达成时越踏实。', text: 'There are no shortcuts to any place worth going.', from: '佚名' },
+    { note: '没人替你逼自己，只能自己来。', text: 'Small steps every day lead to big changes.', from: '佚名' },
+    { note: '好东西，都不在舒服区里。', text: 'Discipline is the bridge between goals and accomplishment.', from: 'Jim Rohn' },
+    { note: '没做成前都像不可能，做完了就平常了。', text: 'Motivation gets you started. Habit keeps you going.', from: '佚名' },
+    { note: '相信自己行，就已经成功一半。', text: 'You don’t have to be great to start, but you have to start to be great.', from: '佚名' },
+    { note: '别盯着钟，学钟那样一直走。', text: 'The harder you work for something, the greater you’ll feel when you achieve it.', from: '佚名' },
+    { note: '一年后你会庆幸今天开始了。', text: 'Push yourself, because no one else is going to do it for you.', from: '佚名' },
+    { note: '未来，藏在你今天的行动里。', text: 'Great things never come from comfort zones.', from: '佚名' },
+    { note: '默默努力，让结果替你说话。', text: 'It always seems impossible until it’s done.', from: 'Nelson Mandela' },
+    { note: '保持饥饿，保持天真。', text: 'Believe you can and you’re halfway there.', from: 'Theodore Roosevelt' },
+    { note: '限制你的，往往只是你的想象。', text: 'Don’t watch the clock; do what it does. Keep going.', from: 'Sam Levenson' },
+    { note: '想、愿、做，三步走起来。', text: 'A year from now you may wish you had started today.', from: 'Karen Lamb' },
+    { note: '要的是有产出，不是瞎忙。', text: 'The future depends on what you do today.', from: 'Gandhi' },
+    { note: '一点一点，也能走很远。', text: 'Work hard in silence; let success make the noise.', from: '佚名' },
+    { note: '成败靠的不是聪明，是持续的努力。', text: 'Stay hungry, stay foolish.', from: 'Steve Jobs' },
+    { note: '压力下的从容，就是勇气。', text: 'Your limitation—it’s only your imagination.', from: '佚名' },
+    { note: '天才，九十九分是汗水。', text: 'Dream it. Wish it. Do it.', from: '佚名' },
+    { note: '学得开心，就忘不掉。', text: 'Focus on being productive instead of busy.', from: '佚名' },
+    { note: '投资知识，回报最好。', text: 'Little by little, one travels far.', from: 'J.R.R. Tolkien' },
+    { note: '读书对脑子，就像运动对身体。', text: 'Continuous effort—not strength or intelligence—is the key to unlocking our potential.', from: 'Winston Churchill' },
+    { note: '读得越多，知道得越多。', text: 'Courage is grace under pressure.', from: 'Ernest Hemingway' },
+    { note: '今天爱读书，明天能领头。', text: 'Genius is one percent inspiration and ninety-nine percent perspiration.', from: 'Thomas Edison' },
+    { note: '读书的人，活过很多种人生。', text: 'What we learn with pleasure we never forget.', from: 'Alfred Mercier' },
+    { note: '好奇，是智慧的开头。', text: 'An investment in knowledge pays the best interest.', from: 'Benjamin Franklin' },
+    { note: '知道自己无知，才是最真的智慧。', text: 'Reading is to the mind what exercise is to the body.', from: 'Joseph Addison' },
+    { note: '把伤痕变成智慧。', text: 'The more that you read, the more things you will know.', from: 'Dr. Seuss' },
+    { note: '敢问，最多傻五分钟；不问，傻一辈子。', text: 'Today a reader, tomorrow a leader.', from: 'Margaret Fuller' },
+    { note: '行动，是成功最底下的那块砖。', text: 'A reader lives a thousand lives before he dies.', from: 'George R.R. Martin' },
+    { note: '别数日子，让每一天都算数。', text: 'Wisdom begins in wonder.', from: 'Socrates' },
+    { note: '不投，命中率永远是零。', text: 'The only true wisdom is in knowing you know nothing.', from: 'Socrates' },
+    { note: '天才不努力，也会被努力的人超过。', text: 'Turn your wounds into wisdom.', from: 'Oprah Winfrey' },
+    { note: '成功不是碰巧，是苦出来的。', text: 'He who asks a question is a fool for five minutes; he who does not ask remains a fool forever.', from: 'Chinese proverb' },
+    { note: '一次次跌倒，才换来最后站上领奖台。', text: 'Action is the foundational key to all success.', from: 'Pablo Picasso' },
+    { note: '站在前人肩上，才看得更远，别忘了感恩来路。', text: 'Don’t count the days; make the days count.', from: 'Muhammad Ali' },
+    { note: '知识有边，想象力没有。', text: 'You miss 100% of the shots you don’t take.', from: 'Wayne Gretzky' },
+    { note: '别停下去问为什么，那是进步的根。', text: 'Hard work beats talent when talent doesn’t work hard.', from: '佚名' },
+    { note: '别怕未知，去弄懂它就好了。', text: 'Success is no accident. It is hard work, perseverance, learning, studying, sacrifice.', from: 'Pelé' },
+    { note: '活下来的不是最强最聪明，是最能适应变化的。', text: 'I’ve failed over and over and over again in my life. And that is why I succeed.', from: 'Michael Jordan' }
+,
+    { note: '真理摆在那，任谁也压不住。', text: 'If I have seen further it is by standing on the shoulders of Giants.', from: 'Isaac Newton' },
+    { note: '宇宙里还有无数奇妙，等着被发现。', text: 'Imagination is more important than knowledge.', from: 'Albert Einstein' },
+    { note: '说法越惊人，越要惊人地求证。', text: 'The important thing is not to stop questioning.', from: 'Albert Einstein' },
+    { note: '别骗自己，你才是最好骗的那个人。', text: 'Nothing in life is to be feared, it is only to be understood.', from: 'Marie Curie' },
+    { note: '为长远去干，未来会记得你。', text: 'It is not the strongest of the species that survives, but the one most responsive to change.', from: 'Charles Darwin' },
+    { note: '聪明，就是能随变化调整自己。', text: 'And yet it moves.', from: 'Galileo Galilei' },
+    { note: '科学不是高高在上，就在日子里。', text: 'Somewhere, something incredible is waiting to be known.', from: 'Carl Sagan' },
+    { note: '脑子里的东西，比肉身更长久。', text: 'Extraordinary claims require extraordinary evidence.', from: 'Carl Sagan' },
+    { note: '你做的事有意义，关键是你想造哪种意义。', text: 'The first principle is that you must not fool yourself—and you are the easiest person to fool.', from: 'Richard Feynman' },
+    { note: '眼前虽近，够我们忙好一阵了。', text: 'The present is theirs; the future, for which I really worked, is mine.', from: 'Nikola Tesla' },
+    { note: '活不活、怎么活，是每个人自己的问号。', text: 'Intelligence is the ability to adapt to change.', from: 'Stephen Hawking' },
+    { note: '人生如戏，你也是其中一个角色。', text: 'Science and everyday life cannot and should not be separated.', from: 'Rosalind Franklin' },
+    { note: '最先要对得起的，是你自己。', text: 'That brain of mine is something more than merely mortal, as time will show.', from: 'Ada Lovelace' },
+    { note: '开篇这句讽刺，道尽人情世故。', text: 'What you do makes a difference, and you have to decide what kind of difference you want to make.', from: 'Jane Goodall' },
+    { note: '最好和最坏，常在同一时刻。', text: 'We can only see a short distance ahead, but we can see plenty there that needs to be done.', from: 'Alan Turing' },
+    { note: '幸福大同小异，不幸各有各的不幸。', text: 'To be, or not to be: that is the question.', from: 'William Shakespeare' },
+    { note: '人总想逆流回过去，却只能被冲着往前。', text: 'All the world’s a stage, and all the men and women merely players.', from: 'William Shakespeare' },
+    { note: '世界会打碎每个人，有人却在被打碎处长出力量。', text: 'This above all: to thine own self be true.', from: 'William Shakespeare' },
+    { note: '谁能改写过去，谁就握着未来。', text: 'It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.', from: 'Jane Austen' },
+    { note: '定义你的，是选择，不是天赋。', text: 'It was the best of times, it was the worst of times.', from: 'Charles Dickens' },
+    { note: '迷路的人，未必真迷路。', text: 'Happy families are all alike; every unhappy family is unhappy in its own way.', from: 'Leo Tolstoy' },
+    { note: '再长的夜，太阳也会回来。', text: 'So we beat on, boats against the current, borne back ceaselessly into the past.', from: 'F. Scott Fitzgerald' },
+    { note: '我不是笼中鸟，谁也网不住我。', text: 'The world breaks everyone, and afterward many are strong at the broken places.', from: 'Ernest Hemingway' },
+    { note: '都躺在泥里，有人却抬头看星。', text: 'Who controls the past controls the future. Who controls the present controls the past.', from: 'George Orwell' },
+    { note: '说的话做的事会被忘，给人的感觉不会。', text: 'It is our choices, Harry, that show what we truly are, far more than our abilities.', from: 'J.K. Rowling' },
+    { note: '迷路的人，未必真迷路。', text: 'Not all those who wander are lost.', from: 'J.R.R. Tolkien' },
+    { note: '再长的夜，太阳也会回来。', text: 'Even the darkest night will end and the sun will rise.', from: 'Victor Hugo' },
+    { note: '我不是笼中鸟，谁也网不住我。', text: 'I am no bird; and no net ensnares me.', from: 'Charlotte Brontë' },
+    { note: '都躺在泥里，有人却抬头看星。', text: 'We are all in the gutter, but some of us are looking at the stars.', from: 'Oscar Wilde' },
+    { note: '说的话做的事会被忘，给人的感觉不会。', text: 'People will forget what you said, people will forget what you did, but people will never forget how you made them feel.', from: 'Maya Angelou' }
+];
 
   var quoteIndex = null;
   var quoteDayKey = null;
+  var quoteDeck = [];   // 打乱后的「待抽」序号队列
+  var quotePos = -1;    // 当前抽到队列的位置
+  var currentQuoteText = '';  // 当前展示名句的正文（用作存储键）
+
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  // 生成一张不含 exclude 的乱序牌堆
+  function buildDeck(exclude) {
+    var pool = [];
+    for (var i = 0; i < FAMOUS_QUOTES.length; i++) if (i !== exclude) pool.push(i);
+    return shuffle(pool);
+  }
 
   function dailyQuoteIndex() {
     var now = new Date();
@@ -538,7 +811,12 @@
   function renderQuotes() {
     var today = new Date();
     var tk = dateKey(today);
-    if (quoteDayKey !== tk) { quoteDayKey = tk; quoteIndex = dailyQuoteIndex(); }
+    if (quoteDayKey !== tk) {
+      quoteDayKey = tk;
+      quoteIndex = dailyQuoteIndex();
+      quoteDeck = buildDeck(quoteIndex);
+      quotePos = -1;
+    }
     if (quoteIndex == null || quoteIndex < 0 || quoteIndex >= FAMOUS_QUOTES.length) {
       quoteIndex = dailyQuoteIndex();
     }
@@ -550,14 +828,182 @@
     var fromEl = $('#quoteBigFrom');
     if (textEl) textEl.textContent = q.text;
     if (fromEl) fromEl.textContent = '—— ' + q.from;
+    currentQuoteText = q.text;
+    renderQuoteNotes(q);
+  }
+
+  // 展示当前名句的「解析」+ 用户自己的理解（含历史）
+  function renderQuoteNotes(q) {
+    var noteEl = $('#quoteNote');
+    if (noteEl) noteEl.textContent = q.note || '';
+    var ta = $('#quoteMyNote');
+    var recs = (state.quoteNotes && state.quoteNotes[q.text]) || [];
+    if (ta) ta.value = recs.length ? recs[recs.length - 1].note : '';
+    renderNoteHistory(q.text);
+    updateFavBtn(q.text);
+  }
+
+  function isFav(text) {
+    return Array.isArray(state.favorites) && state.favorites.indexOf(text) !== -1;
+  }
+
+  function updateFavBtn(text) {
+    var btn = $('#favBtn');
+    if (!btn) return;
+    var on = isFav(text);
+    btn.textContent = on ? '★ 已收藏' : '☆ 收藏此句';
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  function toggleFavorite() {
+    if (!state.favorites || !Array.isArray(state.favorites)) state.favorites = [];
+    var t = currentQuoteText;
+    var i = state.favorites.indexOf(t);
+    if (i === -1) {
+      state.favorites.push(t);
+      toast('已收藏这句');
+    } else {
+      state.favorites.splice(i, 1);
+      toast('已取消收藏');
+    }
+    save();
+    updateFavBtn(t);
+    renderFavorites();
+  }
+
+  // 收藏夹：句子 + 你的理解（站点解析）+ 我的理解，逐条对应
+  function renderFavorites() {
+    var list = $('#favList');
+    var empty = $('#favEmpty');
+    var count = $('#favCount');
+    if (!list) return;
+    var favs = Array.isArray(state.favorites) ? state.favorites : [];
+    if (count) count.textContent = favs.length + ' 句';
+    if (!favs.length) {
+      list.innerHTML = '';
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    var html = '';
+    favs.forEach(function (text) {
+      var q = FAMOUS_QUOTES.filter(function (x) { return x.text === text; })[0];
+      if (!q) return;
+      html += '<article class="fav-card">';
+      html += '<blockquote class="fav-quote">' + escapeHtml(q.text) + '</blockquote>';
+      html += '<p class="fav-from">—— ' + escapeHtml(q.from) + '</p>';
+      // 你的理解（站点解析）—— 斜体小字，放在句子下方
+      html += '<p class="fav-note fav-note-site">解析 · ' + escapeHtml(q.note || '') + '</p>';
+      // 我的理解（用户记录）—— 斜体小字
+      var recs = (state.quoteNotes && state.quoteNotes[text]) || [];
+      if (recs.length) {
+        for (var i = recs.length - 1; i >= 0; i--) {
+          html += '<p class="fav-note fav-note-mine"><span class="fav-note-tag">我的 · ' +
+            fmtStamp(recs[i].t) + '</span>' + escapeHtml(recs[i].note) + '</p>';
+        }
+      } else {
+        html += '<p class="fav-note fav-note-mine fav-note-muted">（还没写自己的理解，去名句页补一句吧）</p>';
+      }
+      html += '<button class="fav-remove" type="button" data-text="' + escapeHtml(text) + '">取消收藏</button>';
+      html += '</article>';
+    });
+    list.innerHTML = html;
+  }
+
+  function fmtStamp(ms) {
+    var d = new Date(ms);
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function renderNoteHistory(text) {
+    var box = $('#noteHistory');
+    if (!box) return;
+    var recs = (state.quoteNotes && state.quoteNotes[text]) || [];
+    if (!recs.length) {
+      box.innerHTML = '<p class="qnc-empty">还没有记录，写下第一句吧。</p>';
+      return;
+    }
+    var html = '';
+    for (var i = recs.length - 1; i >= 0; i--) {
+      html += '<div class="note-item">' +
+        '<span class="note-time">' + fmtStamp(recs[i].t) + '</span>' +
+        '<p class="note-text">' + escapeHtml(recs[i].note) + '</p></div>';
+    }
+    box.innerHTML = html;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function saveNote() {
+    var ta = $('#quoteMyNote');
+    if (!ta) return;
+    var val = ta.value.trim();
+    if (!val) { toast('写点什么再保存吧'); return; }
+    if (!state.quoteNotes) state.quoteNotes = {};
+    if (!state.quoteNotes[currentQuoteText] || !Array.isArray(state.quoteNotes[currentQuoteText])) {
+      state.quoteNotes[currentQuoteText] = [];
+    }
+    state.quoteNotes[currentQuoteText].push({ t: Date.now(), note: val });
+    save();
+    toast('已保存你的理解');
+    renderNoteHistory(currentQuoteText);
+  }
+
+  function openAllNotes() {
+    var list = $('#allNotesList');
+    if (!list) return;
+    var texts = Object.keys(state.quoteNotes || {}).filter(function (t) {
+      return Array.isArray(state.quoteNotes[t]) && state.quoteNotes[t].length;
+    });
+    if (!texts.length) {
+      list.innerHTML = '<p class="qnc-empty">还没有任何记录，去名句页写下第一句吧。</p>';
+    } else {
+      // 按最近一次记录时间倒序
+      texts.sort(function (a, b) {
+        var ra = state.quoteNotes[a], rb = state.quoteNotes[b];
+        return rb[rb.length - 1].t - ra[ra.length - 1].t;
+      });
+      var html = '';
+      texts.forEach(function (text) {
+        var recs = state.quoteNotes[text];
+        var meta = FAMOUS_QUOTES.filter(function (q) { return q.text === text; })[0];
+        html += '<div class="notes-group">' +
+          '<div class="notes-q"><span class="notes-q-text">' + escapeHtml(text) + '</span>' +
+          (meta ? '<span class="notes-q-from">' + escapeHtml(meta.from) + '</span>' : '') + '</div>';
+        for (var i = recs.length - 1; i >= 0; i--) {
+          html += '<div class="note-item">' +
+            '<span class="note-time">' + fmtStamp(recs[i].t) + '</span>' +
+            '<p class="note-text">' + escapeHtml(recs[i].note) + '</p></div>';
+        }
+        html += '</div>';
+      });
+      list.innerHTML = html;
+    }
+    var modal = $('#notesModal');
+    if (modal) modal.hidden = false;
+  }
+
+  function closeAllNotes() {
+    var modal = $('#notesModal');
+    if (modal) modal.hidden = true;
   }
 
   function refreshQuote() {
     var n = FAMOUS_QUOTES.length;
     if (n > 1) {
-      var next = quoteIndex;
-      while (next === quoteIndex) next = Math.floor(Math.random() * n);
-      quoteIndex = next;
+      // 从牌堆顺序抽；抽空了再洗一副新的（排除当前这句，避免立刻重复）
+      quotePos++;
+      if (quotePos >= quoteDeck.length) {
+        quoteDeck = buildDeck(quoteIndex);
+        quotePos = 0;
+      }
+      quoteIndex = quoteDeck[quotePos];
     }
     renderQuotes();
     var textEl = $('#quoteBigText');
@@ -728,6 +1174,144 @@
 
   function renderTools() { /* 工具为静态结构，结果保留在 DOM 中 */ }
 
+  /* ---------------- 工具 04：一元二次不等式 ---------------- */
+  var inequalSign = 'gt';
+
+  function solveInequal() {
+    var box = $('#inequalResult');
+    var a = parseFloat($('#ia').value);
+    var b = parseFloat($('#ib').value);
+    var c = parseFloat($('#ic').value);
+    if (!isFinite(a) || !isFinite(b) || !isFinite(c)) {
+      showResult(box, '<p class="res-strong">请填写 a、b、c 三个系数</p>', true);
+      return;
+    }
+    if (a === 0) {
+      showResult(box, '<p class="res-strong">a = 0 不是二次不等式，请换成一次函数工具。</p>', true);
+      return;
+    }
+    var sign = inequalSign;
+    var D = b * b - 4 * a * c;
+    var html = '<p class="res-strong">' + fmt(a, 0) + 'x² ' + (b >= 0 ? '+ ' : '− ') + fmt(Math.abs(b), 0) +
+      'x ' + (c >= 0 ? '+ ' : '− ') + fmt(Math.abs(c), 0) +
+      ' ' + ({ gt: '> 0', ge: '≥ 0', lt: '< 0', le: '≤ 0' })[sign] + '</p>';
+
+    if (D < 0) {
+      // 无实根：整条实数轴符号恒为 a 的符号
+      var up = (sign === 'gt' || sign === 'ge') ? a > 0 : a < 0;
+      html += '<p class="res-line">判别式 Δ = ' + fmt(D, 1) + ' &lt; 0，无实根。</p>';
+      html += '<p class="res-line res-sub">' + (up ? '恒成立，解集为全体实数 ℝ。' : '无解，解集为空 ∅。') + '</p>';
+    } else if (D === 0) {
+      var r0 = -b / (2 * a);
+      html += '<p class="res-line">判别式 Δ = 0，唯一根 x = ' + fmt(r0, 2) + '。</p>';
+      var include0 = (sign === 'ge' || sign === 'le');
+      if ((sign === 'gt' || sign === 'lt')) {
+        html += '<p class="res-line res-sub">解集为 x ≠ ' + fmt(r0, 2) + ' 的一切实数（x = ' + fmt(r0, 2) + ' 处取 0，不取）。</p>';
+      } else {
+        html += '<p class="res-line res-sub">解集为全体实数 ℝ（x = ' + fmt(r0, 2) + ' 处恰为 0，' + (include0 ? '可取' : '不取') + '）。</p>';
+      }
+    } else {
+      var s = Math.sqrt(D);
+      var r1 = (-b - s) / (2 * a), r2 = (-b + s) / (2 * a);
+      if (r1 > r2) { var t = r1; r1 = r2; r2 = t; }
+      html += '<p class="res-line">Δ = ' + fmt(D, 1) + ' &gt; 0，两根 x₁ = ' + fmt(r1, 2) + '，x₂ = ' + fmt(r2, 2) + '。</p>';
+      var iOpen = '(' + fmt(r1, 2) + ', ' + fmt(r2, 2) + ')';
+      var iClosed = '[' + fmt(r1, 2) + ', ' + fmt(r2, 2) + ']';
+      var oOpen = '(-∞, ' + fmt(r1, 2) + ') ∪ (' + fmt(r2, 2) + ', +∞)';
+      var oClosed = '(-∞, ' + fmt(r1, 2) + '] ∪ [' + fmt(r2, 2) + ', +∞)';
+      // a>0：开口向上，根之间为负、根外为正；a<0 则相反
+      if (a > 0) {
+        if (sign === 'gt') html += '<p class="res-line res-sub">开口向上，根外为正：' + oOpen + '。</p>';
+        else if (sign === 'ge') html += '<p class="res-line res-sub">开口向上，根外及根上为正：' + oClosed + '。</p>';
+        else if (sign === 'lt') html += '<p class="res-line res-sub">开口向上，两根之间为负：' + iOpen + '。</p>';
+        else html += '<p class="res-line res-sub">开口向上，两根之间及根上为负：' + iClosed + '。</p>';
+      } else {
+        if (sign === 'gt') html += '<p class="res-line res-sub">开口向下，两根之间为正：' + iOpen + '。</p>';
+        else if (sign === 'ge') html += '<p class="res-line res-sub">开口向下，两根之间及根上为正：' + iClosed + '。</p>';
+        else if (sign === 'lt') html += '<p class="res-line res-sub">开口向下，根外为负：' + oOpen + '。</p>';
+        else html += '<p class="res-line res-sub">开口向下，根外及根上为负：' + oClosed + '。</p>';
+      }
+    }
+    showResult(box, html);
+  }
+
+  /* ---------------- 工具 05：随机抽背 ---------------- */
+  var drillLast = -1;
+  function drawDrill() {
+    var box = $('#drillResult');
+    var raw = $('#drillInput').value;
+    var items = raw.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (items.length === 0) {
+      showResult(box, '<p class="res-strong">先在上面写几行要背的，每行一个</p>', true);
+      return;
+    }
+    if (items.length === 1) {
+      showResult(box, '<p class="res-strong">抽到：' + items[0] + '</p>');
+      drillLast = 0;
+      return;
+    }
+    var idx = drillLast;
+    while (idx === drillLast) idx = Math.floor(Math.random() * items.length);
+    drillLast = idx;
+    showResult(box, '<p class="res-strong">抽到：' + items[idx] + '</p>' +
+      '<p class="res-line res-sub">第 ' + (idx + 1) + ' 条，共 ' + items.length + ' 条。</p>');
+  }
+
+  /* ---------------- 工具 06：专注番茄钟 ---------------- */
+  var focusTimer = null, focusTotal = 0, focusLeft = 0, focusRunning = false;
+  var FOCUS_BAR_C = 2 * Math.PI * 54;
+  function focusRender() {
+    var m = Math.floor(focusLeft / 60), s = focusLeft % 60;
+    var txt = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    var ce = $('#focusClock'); if (ce) ce.textContent = txt;
+    var bar = $('#focusBar');
+    if (bar) {
+      var frac = focusTotal > 0 ? focusLeft / focusTotal : 0;
+      bar.style.strokeDasharray = FOCUS_BAR_C;
+      bar.style.strokeDashoffset = FOCUS_BAR_C * (1 - frac);
+    }
+  }
+  function focusStop() {
+    focusRunning = false;
+    if (focusTimer) { clearInterval(focusTimer); focusTimer = null; }
+  }
+  function focusTick() {
+    focusLeft--;
+    if (focusLeft <= 0) {
+      focusLeft = 0; focusRender(); focusStop();
+      var btn = $('#focusStart'); if (btn) btn.textContent = '开始';
+      var hint = $('#focusHint'); if (hint) hint.textContent = '时间到，起来走两步、喝口水。';
+      toast('专注结束，休息一下 ☕');
+      return;
+    }
+    focusRender();
+  }
+  function focusStart() {
+    var min = parseFloat($('#focusMin').value);
+    if (!isFinite(min) || min < 1) min = 25;
+    if (focusTotal === 0 || focusLeft === 0) { focusTotal = Math.round(min * 60); focusLeft = focusTotal; }
+    if (focusRunning) {
+      focusStop();
+      var b = $('#focusStart'); if (b) b.textContent = '继续';
+      var h = $('#focusHint'); if (h) h.textContent = '已暂停，点「继续」接着算。';
+      return;
+    }
+    focusRunning = true;
+    var b2 = $('#focusStart'); if (b2) b2.textContent = '暂停';
+    var h2 = $('#focusHint'); if (h2) h2.textContent = '专注中…尽量别切走。';
+    focusTimer = setInterval(focusTick, 1000);
+    focusRender();
+  }
+  function focusReset() {
+    focusStop();
+    var min = parseFloat($('#focusMin').value);
+    if (!isFinite(min) || min < 1) min = 25;
+    focusTotal = Math.round(min * 60); focusLeft = focusTotal;
+    var b = $('#focusStart'); if (b) b.textContent = '开始';
+    var h = $('#focusHint'); if (h) h.textContent = '点「开始」进入专注，建议先关掉别的标签页。';
+    focusRender();
+  }
+
   /* ---------------- 渲染：设置 ---------------- */
   function renderSettings() {
     $('#nickname').value = state.nickname || '';
@@ -811,7 +1395,9 @@
     else if (view === 'weekly') renderWeekly(true);
     else if (view === 'plan') renderPlan();
     else if (view === 'tools') renderTools();
+    else if (view === 'mistakes') renderMistakes();
     else if (view === 'quotes') renderQuotes();
+    else if (view === 'favorites') renderFavorites();
     else if (view === 'settings') renderSettings();
     updateSideStreak();
   }
@@ -1057,6 +1643,44 @@
   var quoteRefreshBtn = $('#quoteRefresh');
   if (quoteRefreshBtn) quoteRefreshBtn.addEventListener('click', refreshQuote);
 
+  // 名句：保存/历史/全部记录
+  var saveNoteBtn = $('#saveNote');
+  if (saveNoteBtn) saveNoteBtn.addEventListener('click', saveNote);
+  var toggleHistoryBtn = $('#toggleHistory');
+  if (toggleHistoryBtn) toggleHistoryBtn.addEventListener('click', function () {
+    var box = $('#noteHistory');
+    if (!box) return;
+    var open = box.hidden;
+    box.hidden = !open;
+    toggleHistoryBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggleHistoryBtn.textContent = open ? '收起历史' : '查看历史';
+    if (open) renderNoteHistory(currentQuoteText);
+  });
+  var allNotesBtn = $('#allNotesBtn');
+  if (allNotesBtn) allNotesBtn.addEventListener('click', openAllNotes);
+  var notesModalClose = $('#notesModalClose');
+  if (notesModalClose) notesModalClose.addEventListener('click', closeAllNotes);
+  var notesModal = $('#notesModal');
+  if (notesModal) notesModal.addEventListener('click', function (e) { if (e.target === notesModal) closeAllNotes(); });
+
+  // 收藏
+  var favBtn = $('#favBtn');
+  if (favBtn) favBtn.addEventListener('click', toggleFavorite);
+  var favList = $('#favList');
+  if (favList) favList.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.fav-remove') : null;
+    if (!btn) return;
+    var t = btn.getAttribute('data-text');
+    var i = state.favorites.indexOf(t);
+    if (i !== -1) {
+      state.favorites.splice(i, 1);
+      save();
+      toast('已取消收藏');
+      renderFavorites();
+      updateFavBtn(currentQuoteText);
+    }
+  });
+
   var solveQuadBtn = $('#solveQuad');
   if (solveQuadBtn) solveQuadBtn.addEventListener('click', solveQuadratic);
   var calcScoreBtn = $('#calcScore');
@@ -1081,15 +1705,94 @@
   var calcPrimeBtn = $('#calcPrime');
   if (calcPrimeBtn) calcPrimeBtn.addEventListener('click', calcPrime);
 
+  // 04 一元二次不等式
+  var solveInequalBtn = $('#solveInequal');
+  if (solveInequalBtn) solveInequalBtn.addEventListener('click', solveInequal);
+  var inequalSignBox = $('#inequalSign');
+  if (inequalSignBox) {
+    inequalSignBox.addEventListener('click', function (e) {
+      var chip = e.target.closest ? e.target.closest('.unit-chip') : null;
+      if (!chip) return;
+      inequalSign = chip.getAttribute('data-sign') || 'gt';
+      Array.prototype.forEach.call(inequalSignBox.querySelectorAll('.unit-chip'), function (el) {
+        var on = el === chip;
+        el.classList.toggle('is-on', on);
+        el.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      var box = $('#inequalResult');
+      if (box && !box.hidden) solveInequal();
+    });
+  }
+
+  // 05 随机抽背
+  var drawDrillBtn = $('#drawDrill');
+  if (drawDrillBtn) drawDrillBtn.addEventListener('click', drawDrill);
+
+  // 06 专注番茄钟
+  var focusStartBtn = $('#focusStart');
+  if (focusStartBtn) focusStartBtn.addEventListener('click', focusStart);
+  var focusResetBtn = $('#focusReset');
+  if (focusResetBtn) focusResetBtn.addEventListener('click', focusReset);
+  var focusMinEl = $('#focusMin');
+  if (focusMinEl) focusMinEl.addEventListener('change', focusReset);
+
   // 在输入框里按回车也能直接计算
   [['#qa', solveQuadratic], ['#qb', solveQuadratic], ['#qc', solveQuadratic],
    ['#scGot', calcScore], ['#scTotal', calcScore], ['#scTarget', calcScore],
-   ['#pn', calcPrime]].forEach(function (pair) {
+   ['#pn', calcPrime],
+   ['#ia', solveInequal], ['#ib', solveInequal], ['#ic', solveInequal]].forEach(function (pair) {
     var el = $(pair[0]);
     if (el) el.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); pair[1](); }
     });
   });
+
+  /* ---------------- 错题本交互 ---------------- */
+  var mkAddBtn = $('#mkAdd');
+  if (mkAddBtn) mkAddBtn.addEventListener('click', addMistake);
+
+  var mkTitleEl = $('#mkTitle');
+  if (mkTitleEl) {
+    mkTitleEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); addMistake(); }
+    });
+  }
+
+  var mkSubjectsBox = $('#mkSubjects');
+  if (mkSubjectsBox) {
+    mkSubjectsBox.addEventListener('click', function (e) {
+      var chip = e.target.closest ? e.target.closest('.unit-chip') : null;
+      if (!chip) return;
+      mkSubject = chip.getAttribute('data-subject') || '语文';
+      renderMistakes();
+    });
+  }
+
+  var mkFiltersBox = $('#mkFilters');
+  if (mkFiltersBox) {
+    mkFiltersBox.addEventListener('click', function (e) {
+      var chip = e.target.closest ? e.target.closest('.unit-chip') : null;
+      if (!chip) return;
+      mkFilter = chip.getAttribute('data-filter') || 'all';
+      renderMistakes();
+    });
+  }
+
+  var mkListBox = $('#mkList');
+  if (mkListBox) {
+    mkListBox.addEventListener('click', function (e) {
+      var del = e.target.closest ? e.target.closest('[data-del-mk]') : null;
+      if (del) {
+        e.preventDefault();
+        deleteMistake(del.getAttribute('data-del-mk'));
+        return;
+      }
+      var check = e.target.closest ? e.target.closest('.mk-check') : null;
+      if (!check) return;
+      var item = check.closest('.mk-item');
+      if (item) toggleMistake(item.getAttribute('data-id'));
+    });
+  }
 
   /* ---------------- 尺寸变化 ---------------- */
   var resizeTimer = null;
