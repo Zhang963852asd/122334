@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1c2a1e">
+<title>知行 · 月考后学习提升计划</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="preload" as="image" href="hero-bg.png">
+<link rel="preload" as="image" href="closing-bg.png">
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-grid" viewBox="0 0 24 24">
+    <rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/>
+    <rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/>
+    <rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/>
+    <rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24">
+    <rect x="3.5" y="3.5" width="17" height="17" rx="5"/>
+    <path d="M7.8 12.4l2.9 2.9 5.6-6.3"/>
+  </symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24">
+    <path d="M20 4c0 8.2-4.3 12.4-9.6 12.4A5.4 5.4 0 0 1 5 11C5 6 9.6 4 20 4Z"/>
+    <path d="M4 20c1.6-4 3.6-6.8 7.2-9"/>
+  </symbol>
+  <symbol id="i-book" viewBox="0 0 24 24">
+    <path d="M4 5.2A2.2 2.2 0 0 1 6.2 3H19v15.4H6.2A2.2 2.2 0 0 0 4 20.6V5.2Z"/>
+    <path d="M8.2 7.4h6.6M8.2 10.8h4.4"/>
+  </symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24">
+    <path d="M5 7.5h14M5 16.5h14"/>
+    <circle cx="9.5" cy="7.5" r="2.2"/>
+    <circle cx="14.5" cy="16.5" r="2.2"/>
+  </symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24">
+    <path d="M20 12.4c0 4-3.6 7.2-8 7.2a9 9 0 0 1-2.5-.36L5 21l1-3.6A7 7 0 0 1 4 12.4C4 8.4 7.6 5.2 12 5.2s8 3.2 8 7.2Z"/>
+  </symbol>
+  <symbol id="sprig" viewBox="0 0 64 96">
+    <path d="M32 92C32 66 30 44 25 22"/>
+    <path d="M25 22c-9 2-14.5-2.4-16.5-9.6C18 11 23.4 15.4 25 22Z"/>
+    <path d="M27 42c-10 .8-16-4-18-12 9.6-.4 15.8 4.4 18 12Z"/>
+    <path d="M28.5 60c10.4-.4 16.6-5 18.6-13.4-9.8.2-16 4.8-18.6 13.4Z"/>
+    <path d="M30 76c9.6-.2 15.4-4.6 17.4-12.4-9.2.2-15 4.4-17.4 12.4Z"/>
+  </symbol>
+  <symbol id="sprig-small" viewBox="0 0 48 72">
+    <path d="M24 68C24 50 22.6 34 19 17"/>
+    <path d="M19 17c-7 1.4-11-1.8-12.6-7.2C13 8.6 17.2 12 19 17Z"/>
+    <path d="M21.6 38c7.8-.4 12.4-3.8 14-10-7.4.2-12 3.6-14 10Z"/>
+    <path d="M22.6 52c-7.4.6-11.8-3-13.4-9 7.2-.2 11.8 3.2 13.4 9Z"/>
+  </symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 4.5c0 7.4-4 11.3-8.7 11.3A5 5 0 0 1 5 10.8c0-4.6 4.2-6.3 13.5-6.3Z"/><path d="M4.5 19.8c1.5-3.7 3.4-6.2 6.6-8.2"/></svg>
+      </span>
+      <span class="brand-text">
+        <strong>知行</strong>
+        <em>ZHIXING</em>
+      </span>
+    </div>
+
+    <nav class="nav" id="nav" aria-label="主导航">
+      <span class="nav-indicator" id="navIndicator" aria-hidden="true"></span>
+      <a class="nav-item" href="#overview" data-view="overview" style="--i:0">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grid"/></svg>
+        <span>总览</span>
+      </a>
+      <a class="nav-item" href="#daily" data-view="daily" style="--i:1">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+        <span>每日打卡</span>
+      </a>
+      <a class="nav-item" href="#weekly" data-view="weekly" style="--i:2">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-leaf"/></svg>
+        <span>每周复盘</span>
+      </a>
+      <a class="nav-item" href="#plan" data-view="plan" style="--i:3">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-book"/></svg>
+        <span>学习计划</span>
+      </a>
+      <a class="nav-item" href="#settings" data-view="settings" style="--i:4">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sliders"/></svg>
+        <span>设置</span>
+      </a>
+    </nav>
+
+    <div class="side-card">
+      <span class="side-card-label">当前计划</span>
+      <strong class="side-card-title">月考后冲刺</strong>
+      <span class="side-streak">🔥 已连续打卡 <b id="sideStreak">0</b> 天</span>
+    </div>
+
+    <button class="side-foot" type="button" id="feedbackBtn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chat"/></svg>
+      <span>反馈</span>
+    </button>
+  </aside>
+
+  <main class="main" id="main">
+
+    <!-- ================= 总览 ================= -->
+    <section class="view" id="view-overview" data-view="overview">
+      <div class="hero">
+        <div class="hero-bg" role="img" aria-label="水彩书桌插画：书本、钢笔与一杯热茶"></div>
+        <div class="hero-veil"></div>
+        <div class="hero-texture" aria-hidden="true"></div>
+        <div class="hero-inner">
+          <span class="badge"><i class="dot"></i>核心目标 · 语文补短板，理科守优势</span>
+          <h1 class="hero-title">每天坚持一小时，<br><em>稳步提分</em>不突击</h1>
+          <p class="hero-sub">语文从基础题一点点补回来，理科只守住优势不额外加码。每天六个小任务，做完就合上书。</p>
+          <div class="hero-actions">
+            <button class="btn btn-solid" type="button" data-nav="daily">开始今日打卡 <span class="arrow">→</span></button>
+            <button class="btn btn-ghost" type="button" data-nav="plan">查看完整计划</button>
+          </div>
+          <p class="hero-note" id="heroNote">今天 6 项任务 · 约 85 分钟</p>
+        </div>
+        <svg class="hero-sprig" viewBox="0 0 64 96" aria-hidden="true"><use href="#sprig"/></svg>
+      </div>
+
+      <div class="pad">
+        <p class="first-note" id="firstNote" hidden></p>
+        <div class="stat-grid" id="statGrid"></div>
+
+        <section class="block">
+          <header class="block-head">
+            <div>
+              <h2 class="block-title">今日任务</h2>
+              <p class="block-sub" id="todayMeta">按星期自动生成 · 完成后打个勾</p>
+            </div>
+            <button class="link-btn" type="button" data-nav="daily">去打卡页 <span aria-hidden="true">→</span></button>
+          </header>
+          <ul class="task-list" id="overviewTasks" data-date=""></ul>
+        </section>
+
+        <div class="soft-note">
+          <svg class="note-sprig" viewBox="0 0 48 72" aria-hidden="true"><use href="#sprig-small"/></svg>
+          <p><strong>关于连续打卡</strong>每天至少完成 1 项就算打卡。今天还没开始时，会保留昨天之前的连续记录，不算断签。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 每日打卡 ================= -->
+    <section class="view" id="view-daily" data-view="daily" hidden>
+      <div class="pad">
+        <header class="page-head">
+          <div>
+            <h1 class="page-title">每日<em>打卡</em></h1>
+            <p class="page-sub" id="dailyGreeting">把今天这一小时，交给计划。</p>
+          </div>
+          <div class="date-switch">
+            <button class="icon-btn" type="button" data-day="-1" aria-label="前一天">‹</button>
+            <button class="date-pill" type="button" id="datePill" title="回到今天">
+              <span id="dateLabel">10月23日 · 周五</span>
+            </button>
+            <button class="icon-btn" type="button" data-day="1" aria-label="后一天" id="nextDay">›</button>
+          </div>
+        </header>
+
+        <div class="daily-top">
+          <div class="ring-card">
+            <div class="ring-wrap">
+              <svg class="ring" viewBox="0 0 140 140" aria-hidden="true">
+                <circle class="ring-track" cx="70" cy="70" r="58"></circle>
+                <circle class="ring-bar" id="ringBar" cx="70" cy="70" r="58"></circle>
+              </svg>
+              <div class="ring-center">
+                <strong><span id="ringNum">0</span><i>%</i></strong>
+                <small id="ringCaption">今日进度</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="daily-summary">
+            <h2>今天的<em>一小时</em></h2>
+            <p id="dailySummaryText">还没有开始，先挑最想做的一项。</p>
+            <div class="chips" id="dailyChips"></div>
+            <div class="daily-mini">
+              <span>剩余约 <b id="remainMin">0</b> 分钟</span>
+              <span class="sep" aria-hidden="true"></span>
+              <span>已完成 <b id="doneCount">0</b>/<b id="totalCount">0</b> 项</span>
+            </div>
+          </div>
+        </div>
+
+        <ul class="task-list" id="dailyTasks" data-date=""></ul>
+
+        <figure class="quote-card">
+          <span class="quote-mark" aria-hidden="true">“</span>
+          <blockquote id="quoteText">把一小时的坚持，交给时间。</blockquote>
+          <figcaption id="quoteFrom">知行手记</figcaption>
+          <div class="quote-wash" aria-hidden="true"></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ================= 每周复盘 ================= -->
+    <section class="view" id="view-weekly" data-view="weekly" hidden>
+      <div class="pad">
+        <header class="page-head">
+          <div>
+            <h1 class="page-title">每周<em>复盘</em></h1>
+            <p class="page-sub">三句话就够了：丢在哪、懂了没、下周攻什么。</p>
+          </div>
+          <span class="week-pill" id="weekPill">第 43 周</span>
+        </header>
+
+        <div class="review-card">
+          <div class="review-field">
+            <label for="rv1"><span class="rv-num">①</span>语文本周丢分原因</label>
+            <textarea id="rv1" rows="4" placeholder="写具体一点：哪类题、卡在哪一步。比如「文言文实词推断，四个选项都在猜」。" maxlength="600"></textarea>
+          </div>
+          <div class="review-field">
+            <label for="rv2"><span class="rv-num">②</span>各科错题是否弄懂</label>
+            <textarea id="rv2" rows="4" placeholder="哪些错题已经能独立做对，哪 1–2 道还没懂，下周怎么处理。" maxlength="600"></textarea>
+          </div>
+          <div class="review-field">
+            <label for="rv3"><span class="rv-num">③</span>下周主攻内容</label>
+            <textarea id="rv3" rows="4" placeholder="只定一个主攻方向，例如「语文现代文作用题」。" maxlength="600"></textarea>
+          </div>
+          <div class="review-actions">
+            <span class="hint" id="reviewHint">复盘保存在本机浏览器，换设备不会同步</span>
+            <button class="btn btn-solid" type="button" id="saveReview">保存本周复盘</button>
+          </div>
+        </div>
+
+        <section class="block">
+          <header class="block-head">
+            <div>
+              <h2 class="block-title small">历史复盘</h2>
+              <p class="block-sub">倒序排列 · 最近的在最上面</p>
+            </div>
+          </header>
+          <div class="review-history" id="reviewHistory"></div>
+          <p class="empty" id="reviewEmpty" hidden>还没有复盘记录。周日晚花 5 分钟写下三句话，比多刷一套卷更有用。</p>
+        </section>
+      </div>
+    </section>
+
+    <!-- ================= 学习计划 ================= -->
+    <section class="view" id="view-plan" data-view="plan" hidden>
+      <div class="pad">
+        <header class="page-head">
+          <div>
+            <h1 class="page-title">学习<em>计划</em></h1>
+            <p class="page-sub">月考后四周的节奏：平日稳住，周末补齐，四周一循环。</p>
+          </div>
+        </header>
+
+        <section class="plan-block">
+          <div class="plan-left">
+            <span class="plan-num">01</span>
+            <h2>周一至周五<br><em>每日坚持</em></h2>
+            <p>六个小动作，把碎片时间拼成稳定的进步。总时长约 85 分钟，可以拆成早晚两段。</p>
+          </div>
+          <div class="plan-right">
+            <div class="plan-grid">
+              <article class="plan-card">
+                <div class="plan-card-head"><h3>语文基础</h3><span class="tag tag-subject" style="--sc:#b05a41">语文</span></div>
+                <p>字音字形 5 组 + 古诗文默写 2 句。只做基础题，先把该拿的分拿满。</p>
+                <span class="plan-time">15 分钟</span>
+              </article>
+              <article class="plan-card">
+                <div class="plan-card-head"><h3>语文阅读</h3><span class="tag tag-subject" style="--sc:#b05a41">语文</span></div>
+                <p>一篇现代文，只练审题与分点作答，不追求做完整卷。</p>
+                <span class="plan-time">20 分钟</span>
+              </article>
+              <article class="plan-card">
+                <div class="plan-card-head"><h3>语文作文</h3><span class="tag tag-subject" style="--sc:#b05a41">语文</span></div>
+                <p>写一个分论点，或背一句能直接用上的素材。</p>
+                <span class="plan-time">10 分钟</span>
+              </article>
+              <article class="plan-card">
+                <div class="plan-card-head"><h3>政史背诵</h3><span class="tag tag-subject" style="--sc:#a4803f">文综</span></div>
+                <p>单日政治、双日历史，先背框架再补关键词。</p>
+                <span class="plan-time">15 分钟</span>
+              </article>
+              <article class="plan-card">
+                <div class="plan-card-head"><h3>英语单词</h3><span class="tag tag-subject" style="--sc:#4a7368">英语</span></div>
+                <p>30 个高频词 + 3 个长难句，只求认识、能读懂。</p>
+                <span class="plan-time">10 分钟</span>
+              </article>
+              <article class="plan-card">
+                <div class="plan-card-head"><h3>数理化</h3><span class="tag tag-subject" style="--sc:#3f5a3f">数理化</span></div>
+                <p>中档题 5 道，错题当场写清错因，不追新题。</p>
+                <span class="plan-time">15 分钟</span>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="plan-block">
+          <div class="plan-left">
+            <span class="plan-num">02</span>
+            <h2>周末<br><em>整块提升</em></h2>
+            <p>周末不赶进度，用来把这一周没弄懂的东西补齐，顺便按考试节奏走一遍。</p>
+          </div>
+          <div class="plan-right">
+            <div class="plan-wide">
+              <article class="plan-card wide">
+                <div class="plan-card-head"><h3>周六 · 按考试节奏</h3><span class="tag tag-min">约 2 小时</span></div>
+                <p>语文限时阅读 40 分钟 → 文综主观题 30 分钟 → 数理化专项 40 分钟。中途不看答案，做完再统一对。</p>
+              </article>
+              <article class="plan-card wide">
+                <div class="plan-card-head"><h3>周日 · 补齐与收束</h3><span class="tag tag-min">约 1.5 小时</span></div>
+                <p>数理化错题复盘 40 分钟 → 单周写作文提纲 / 双周写完整作文 → 素材摘抄 15 分钟。睡前留 5 分钟做周复盘。</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="plan-block">
+          <div class="plan-left">
+            <span class="plan-num">03</span>
+            <h2>每周复盘<br><em>5 分钟</em></h2>
+            <p>周日晚上做，写三句话。复盘的价值在于具体，不在于字数。</p>
+          </div>
+          <div class="plan-right">
+            <ul class="dot-list">
+              <li><span class="dot" aria-hidden="true"></span><div><strong>丢分原因写具体</strong><p>是哪一类题、卡在哪一步，不写「粗心」「状态不好」。</p></div></li>
+              <li><span class="dot" aria-hidden="true"></span><div><strong>错题只留还没懂的</strong><p>弄懂的打勾移出清单，剩下的下周优先解决。</p></div></li>
+              <li><span class="dot" aria-hidden="true"></span><div><strong>下周只定一个主攻</strong><p>同时补三科等于没补，先把一处漏点补上。</p></div></li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="plan-block">
+          <div class="plan-left">
+            <span class="plan-num">04</span>
+            <h2>月度目标<br><em>可勾选</em></h2>
+            <p>目标按自然月保存，月底回看时勾掉的部分就是这一个月真实发生过的进步。</p>
+          </div>
+          <div class="plan-right">
+            <ul class="goal-list" id="goalList"></ul>
+            <p class="goal-hint" id="goalHint">本月目标 · 勾选后自动保存</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ================= 设置 ================= -->
+    <section class="view" id="view-settings" data-view="settings" hidden>
+      <div class="pad">
+        <header class="page-head">
+          <div>
+            <h1 class="page-title">偏好<em>设置</em></h1>
+            <p class="page-sub">所有数据只保存在这台设备的浏览器里。</p>
+          </div>
+        </header>
+
+        <div class="settings-card">
+          <div class="field">
+            <label for="nickname">昵称</label>
+            <input id="nickname" type="text" maxlength="12" placeholder="怎么称呼你？">
+            <span class="field-hint">只用于页面上的问候语</span>
+          </div>
+          <div class="field">
+            <label for="startDate">使用日期</label>
+            <input id="startDate" type="date">
+            <span class="field-hint">从这一天开始计算计划进度</span>
+          </div>
+
+          <div class="switch-row">
+            <div>
+              <strong>每日打卡提醒</strong>
+              <p>每天晚上提醒你把这六个小任务收个尾。</p>
+            </div>
+            <button class="switch" type="button" role="switch" aria-checked="true" data-switch="dailyReminder" aria-label="每日打卡提醒"><span></span></button>
+          </div>
+          <div class="switch-row">
+            <div>
+              <strong>周末整块学习提醒</strong>
+              <p>周六、周日上午提醒你留出整块时间。</p>
+            </div>
+            <button class="switch" type="button" role="switch" aria-checked="true" data-switch="weekendReminder" aria-label="周末整块学习提醒"><span></span></button>
+          </div>
+        </div>
+
+        <div class="danger-card">
+          <div>
+            <strong>清空本机数据</strong>
+            <p>会删除所有打卡记录、每周复盘与月度目标，且无法恢复。</p>
+          </div>
+          <button class="btn btn-danger" type="button" id="clearData">清空数据</button>
+        </div>
+
+        <p class="settings-note">知行 · 月考后学习提升计划 · 本页不联网，数据存在 localStorage</p>
+      </div>
+    </section>
+
+    <!-- ================= 收尾 ================= -->
+    <section class="closing">
+      <div class="closing-bg" role="img" aria-label="水彩书房插画：书桌、窗与绿植"></div>
+      <div class="closing-veil"></div>
+      <div class="closing-texture" aria-hidden="true"></div>
+      <div class="closing-inner">
+        <h2 class="closing-title">每天一小时，<em>稳步提分</em>，不突击。</h2>
+        <p>计划不用漂亮，能一直做下去就好。今天先把第一个勾打上。</p>
+        <button class="btn btn-solid" type="button" data-nav="daily">开始今日打卡 <span class="arrow">→</span></button>
+      </div>
+      <svg class="closing-sprig left" viewBox="0 0 64 96" aria-hidden="true"><use href="#sprig"/></svg>
+      <svg class="closing-sprig right" viewBox="0 0 48 72" aria-hidden="true"><use href="#sprig-small"/></svg>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <span class="brand-mark dark">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 4.5c0 7.4-4 11.3-8.7 11.3A5 5 0 0 1 5 10.8c0-4.6 4.2-6.3 13.5-6.3Z"/><path d="M4.5 19.8c1.5-3.7 3.4-6.2 6.6-8.2"/></svg>
+          </span>
+          <div>
+            <strong>知行</strong>
+            <p>把计划变成习惯</p>
+          </div>
+        </div>
+        <div class="footer-cols">
+          <div class="footer-col">
+            <h3>功能</h3>
+            <a href="#overview" data-nav="overview">总览</a>
+            <a href="#daily" data-nav="daily">每日打卡</a>
+            <a href="#weekly" data-nav="weekly">每周复盘</a>
+            <a href="#plan" data-nav="plan">学习计划</a>
+          </div>
+          <div class="footer-col">
+            <h3>联系</h3>
+            <a href="mailto:hello@zhixing.study">hello@zhixing.study</a>
+            <a href="#settings" data-nav="settings">反馈与设置</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<div class="toast-host" id="toastHost" aria-live="polite" aria-atomic="true"></div>
+
+<div class="modal" id="confirmModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle">确定清空所有数据？</h2>
+    <p>打卡记录、每周复盘和月度目标都会被删除，且无法恢复。</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" type="button" id="modalCancel">再想想</button>
+      <button class="btn btn-danger btn-sm" type="button" id="modalConfirm">确认清空</button>
+    </div>
+  </div>
+</div>
+
+<noscript><p style="padding:24px;font-family:sans-serif">这个页面需要开启 JavaScript 才能记录打卡数据。</p></noscript>
+
+<script src="app.js"></script>
+</body>
+</html>
