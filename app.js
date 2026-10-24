@@ -2144,16 +2144,14 @@
 
   function signOut() {
     if (!cloud) return;
-    cloud.auth.signOut().then(function () {
+    // scope=local：只清这台设备上的会话，不依赖一次网络往返，断网也能退出
+    var done = function () {
       syncUser = null;
       syncStatus = 'idle';
       renderSyncUI();
       toast('已退出登录，本机数据保留');
-    }).catch(function () {
-      syncUser = null;
-      syncStatus = 'idle';
-      renderSyncUI();
-    });
+    };
+    Promise.resolve(cloud.auth.signOut({ scope: 'local' })).then(done, done);
   }
 
   function onSignedIn(user) {
