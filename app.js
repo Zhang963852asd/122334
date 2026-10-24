@@ -1853,6 +1853,8 @@
   var syncBusy = false;
   var syncQueued = false;
   var pushTimer = null;
+  var retryTimer = null;
+  var retryCount = 0;
   var syncStatus = 'idle';       // idle | syncing | synced | error
   var syncError = '';
   var syncMeta = readSyncMeta();
@@ -2043,6 +2045,8 @@
       writeSyncMeta();
       syncStatus = 'synced';
       syncBusy = false;
+      retryCount = 0;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
       renderSyncUI();
       if (changed) refreshAfterSync();
       if (syncQueued) { syncQueued = false; syncNow('queued'); }
@@ -2050,8 +2054,25 @@
       syncStatus = 'error';
       syncError = describeCloudError(err);
       syncBusy = false;
+      // 服务端瞬时故障（52x 网关错误、超时、断网）自动重试，退避 8s/16s/32s/60s
+      if (cloudReady() && isTransientError(err) && retryCount < 4) {
+        retryCount++;
+        var wait = Math.min(60000, 8000 * Math.pow(2, retryCount - 1));
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(function () {
+          retryTimer = null;
+          syncNow('retry');
+        }, wait);
+        syncError += '，' + Math.round(wait / 1000) + ' 秒后自动重试';
+      }
       renderSyncUI();
     });
+  }
+
+  // 只有「过一会儿可能自己好」的错误才自动重试
+  function isTransientError(err) {
+    var m = ((err && (err.message || err.msg || err.error_description)) || '') + ' ' + ((err && err.code) || '') + ' ' + ((err && err.status) || '');
+    return /521|522|523|502|503|504|Unexpected token|Failed to fetch|NetworkError|load failed|timed? ?out|ETIMEDOUT|ECONNRESET/i.test(m);
   }
 
   function scheduleCloudPush() {
@@ -2077,6 +2098,9 @@
     if (/Password should be at least/i.test(m)) return '密码太短了（至少 6 位）';
     if (/Email not confirmed/i.test(m)) return '邮箱还没验证，去 Supabase 关掉 Confirm email';
     if (/Auth session missing|session_not_found|Invalid Refresh Token|JWT expired/i.test(m)) return '登录状态过期了，退出后重新登录';
+    if (/Unexpected token|is not valid JSON/i.test(m)) return '服务端返回异常，可能正在重启';
+    var st = String((err && (err.code || err.status)) || '');
+    if (/^(50[234]|52[0-9])$/.test(st)) return '服务端暂时不可用（' + st + '）';
     if (/should be different|different from the old/i.test(m)) return '新密码不能和旧密码一样';
     if (/weak|pwned/i.test(m)) return '这个密码太弱，换一个复杂点的';
     if (/rate limit|too many requests/i.test(m)) return '操作太频繁，等一下再试';
@@ -2185,6 +2209,9 @@
     var done = function () {
       syncUser = null;
       syncStatus = 'idle';
+      retryCount = 0;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
       closePwBox();
       renderSyncUI();
       toast('已退出登录，本机数据保留');
