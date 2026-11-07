@@ -747,7 +747,7 @@
         <header class="page-head">
           <div>
             <h1 class="page-title">AI <em>答疑</em></h1>
-            <p class="page-sub">接入你自己的大模型 Key（深度求索 DeepSeek 等），卡住的题随时问。Key 只保存在本机浏览器，不上传云端。</p>
+            <p class="page-sub">登录后直接用站点内置的大模型通道，不用自己配 Key；也可以切成自己的 Key。对话只保存在本机。</p>
           </div>
           <button class="btn btn-ghost btn-sm" type="button" id="aiCfgToggle" aria-expanded="true">AI 设置</button>
         </header>
@@ -755,6 +755,16 @@
         <div class="settings-card ai-config" id="aiConfig">
           <p class="ai-summary" id="aiCfgSummary" hidden></p>
           <div id="aiCfgBody">
+          <div class="ai-config-row">
+            <span class="ai-label">通道</span>
+            <div class="mk-subjects" id="aiModes" role="group" aria-label="选择通道">
+              <button class="unit-chip is-on" type="button" data-mode="builtin" aria-pressed="true">账号内置（登录即用）</button>
+              <button class="unit-chip" type="button" data-mode="own" aria-pressed="false">自带 Key</button>
+            </div>
+          </div>
+          <p class="ai-note" id="aiModeNote"></p>
+
+          <div id="aiOwnFields" hidden>
           <div class="ai-config-row">
             <span class="ai-label">服务商</span>
             <div class="mk-subjects" id="aiProviders" role="group" aria-label="选择服务商">
@@ -782,13 +792,15 @@
               <input id="aiBase" type="text" maxlength="200" placeholder="https://example.com/v1" autocomplete="off">
             </label>
           </div>
+          </div>
+
           <label class="mk-field" for="aiSys">
             <span>系统提示词（可留空，默认是耐心的中学辅导老师）</span>
             <textarea id="aiSys" class="tool-area" rows="2" maxlength="600" placeholder="例如：只辅导语文，回答控制在 200 字以内。"></textarea>
           </label>
           <div class="mk-form-actions">
-            <span class="hint">没有 Key？<a href="https://platform.deepseek.com/api_keys" id="aiKeyLink" target="_blank" rel="noopener">去官方平台申请</a> · 对话记录只保存在本机</span>
-            <button class="btn btn-solid btn-sm" type="button" id="aiSaveCfg">保存配置</button>
+            <span class="hint" id="aiCfgHint">对话记录只保存在本机</span>
+            <button class="btn btn-solid btn-sm" type="button" id="aiSaveCfg">保存设置</button>
           </div>
           </div>
         </div>

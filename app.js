@@ -2215,6 +2215,7 @@
       if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
       closePwBox();
       renderSyncUI();
+      if ($('#aiModes')) aiApplyMode();
       toast('已退出登录，本机数据保留');
     };
     Promise.resolve(cloud.auth.signOut({ scope: 'local' })).then(done, done);
@@ -2226,6 +2227,7 @@
     writeSyncMeta();
     syncStatus = 'idle';
     renderSyncUI();
+    if ($('#aiModes')) aiApplyMode();
     syncNow('login');
   }
 
@@ -2385,12 +2387,13 @@
   var aiInited = false;
 
   function aiLoadCfg() {
-    var def = { provider: 'deepseek', models: {}, base: '', sys: '' };
+    var def = { mode: 'builtin', provider: 'deepseek', models: {}, base: '', sys: '' };
     try {
       var raw = localStorage.getItem(AI_CFG_KEY);
       if (!raw) return def;
       var p = JSON.parse(raw);
       if (!AI_PRESETS[p.provider]) p.provider = 'deepseek';
+      if (p.mode !== 'own') p.mode = 'builtin';
       if (!p.models || typeof p.models !== 'object') p.models = {};
       if (typeof p.base !== 'string') p.base = '';
       if (typeof p.sys !== 'string') p.sys = '';
@@ -2480,12 +2483,47 @@
   function aiUpdateMeta() {
     var meta = $('#aiMeta');
     if (!meta) return;
-    var p = AI_PRESETS[aiCfg.provider];
     var rounds = 0;
     aiMsgs.forEach(function (m) { if (m.role === 'user') rounds++; });
+    var tail = rounds ? ' · 已对话 ' + rounds + ' 轮' : '';
+    if (aiCfg.mode === 'builtin') {
+      meta.textContent = syncUser ? '账号内置通道' + tail : '内置通道需要登录' + tail;
+      return;
+    }
+    var p = AI_PRESETS[aiCfg.provider];
     meta.textContent = aiKeyOf(aiCfg.provider)
-      ? p.name + ' · ' + aiModel() + ' · 已对话 ' + rounds + ' 轮'
+      ? p.name + ' · ' + aiModel() + tail
       : '尚未配置 — 先在上方填入 ' + p.name + ' 的 API Key';
+  }
+
+  // 通道：账号内置（服务端带 Key） / 自带 Key（浏览器直连）
+  function aiApplyMode() {
+    var builtin = aiCfg.mode === 'builtin';
+    var own = $('#aiOwnFields');
+    if (own) own.hidden = builtin;
+    $$('#aiModes .unit-chip').forEach(function (c) {
+      var on = c.getAttribute('data-mode') === (builtin ? 'builtin' : 'own');
+      c.classList.toggle('is-on', on);
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    var note = $('#aiModeNote');
+    if (note) {
+      note.textContent = builtin
+        ? (syncUser
+            ? '已登录，直接用站点内置通道，不用填 Key。'
+            : '内置通道要先登录（设置 → 云端同步）。没登录时请切到「自带 Key」。')
+        : '用自己的 Key：只存在这台设备，不上传云端。';
+    }
+    var saveBtn = $('#aiSaveCfg');
+    if (saveBtn) saveBtn.textContent = builtin ? '保存设置' : '保存配置';
+    var hint = $('#aiCfgHint');
+    if (hint) {
+      hint.textContent = builtin
+        ? '通道 Key 保存在服务端，不会下发到浏览器 · 对话记录只在本机'
+        : '没有 Key？可在服务商官网申请 · 对话记录只保存在本机';
+    }
+    if (aiInited && !aiMsgs.length) aiRenderAll();
+    aiUpdateMeta();
   }
 
   function aiSetCollapsed(collapsed) {
@@ -2496,10 +2534,14 @@
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     btn.textContent = collapsed ? 'AI 设置' : '收起设置';
     if (collapsed) {
+      var builtin = aiCfg.mode === 'builtin';
       var p = AI_PRESETS[aiCfg.provider];
-      sum.innerHTML = '当前：<strong>' + aiEsc(p.name) + '</strong> · <strong>' +
-        aiEsc(aiModel() || '未选模型') + '</strong> · Key ' + (aiKeyOf(aiCfg.provider) ? '已保存' : '未填写') +
-        '，点右上角「AI 设置」可修改';
+      sum.innerHTML = builtin
+        ? '当前：<strong>账号内置通道</strong> · ' + (syncUser ? '已登录，直接提问' : '<strong>未登录</strong>，请先登录或改用自带 Key') +
+          '，点右上角「AI 设置」可修改'
+        : '当前：<strong>' + aiEsc(p.name) + '</strong> · <strong>' +
+          aiEsc(aiModel() || '未选模型') + '</strong> · Key ' + (aiKeyOf(aiCfg.provider) ? '已保存' : '未填写') +
+          '，点右上角「AI 设置」可修改';
     }
   }
 
@@ -2555,9 +2597,12 @@
     if (!host) return;
     host.innerHTML = '';
     if (!aiMsgs.length) {
+      var tip = aiCfg.mode === 'builtin'
+        ? (syncUser ? '已登录，直接在下面提问就行。' : '先在「设置 → 云端同步」登录，或切换成自带 Key。')
+        : '先在上方填好 API Key。';
       host.innerHTML = '<div class="ai-empty"><strong>哪道题卡住了，<em>直接问</em></strong>' +
-        '支持 DeepSeek、Kimi、智谱 GLM、通义千问、OpenAI 或自定义接口。<br>' +
-        '先在上方填好 API Key，对话只保存在这台设备的浏览器里。</div>';
+        '默认走站点内置通道；也可以换成自己的 Key（DeepSeek / Kimi / 智谱 / 通义 / OpenAI）。<br>' +
+        tip + '对话只保存在这台设备的浏览器里。</div>';
       return;
     }
     aiMsgs.forEach(function (m) {
@@ -2581,24 +2626,106 @@
     if (stop) stop.hidden = !v;
   }
 
+  function aiCheckResp(resp) {
+    if (resp.ok) return resp;
+    return resp.text().then(function (t) {
+      var msg = 'HTTP ' + resp.status;
+      try {
+        var j = JSON.parse(t);
+        var e = j && (j.error || j.message);
+        if (e) msg = typeof e === 'string' ? e : (e.message || e.code || msg);
+      } catch (err) {
+        if (t) msg += '：' + t.slice(0, 300);
+      }
+      throw new Error(msg);
+    });
+  }
+
+  // 自带 Key：浏览器直连服务商
+  function aiOwnRequest(ctx) {
+    return fetch(aiBase() + '/chat/completions', {
+      method: 'POST',
+      signal: aiAborter.signal,
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiKeyOf(aiCfg.provider) },
+      body: JSON.stringify({ model: aiModel(), messages: ctx, stream: true, temperature: 0.7 })
+    }).then(aiCheckResp);
+  }
+
+  // 账号内置通道：只把登录令牌交给服务端，Key 留在服务端环境变量里
+  function aiBuiltinRequest(ctx) {
+    return Promise.resolve(cloud ? cloud.auth.getSession() : null).then(function (res) {
+      var s = res && res.data && res.data.session;
+      if (!s || !s.access_token) throw new Error('登录状态已失效，请到「设置 → 云端同步」重新登录');
+      return fetch('/api/ai', {
+        method: 'POST',
+        signal: aiAborter.signal,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.access_token },
+        body: JSON.stringify({ messages: ctx })
+      }).then(aiCheckResp);
+    });
+  }
+
+  function aiStreamInto(resp, bubble) {
+    var answer = '', reasoning = '';
+    var reader = resp.body.getReader();
+    var decoder = new TextDecoder('utf-8');
+    var buf = '';
+    function paint() {
+      bubble.innerHTML = '<span class="ai-role">AI 答疑</span>' +
+        (reasoning ? '<div class="ai-reasoning">' + aiEsc(reasoning) + '</div>' : '') +
+        aiMd(answer) + '<span class="ai-cursor"></span>';
+      aiScroll();
+    }
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.done) return;
+        buf += decoder.decode(r.value, { stream: true });
+        var lines = buf.split('\n');
+        buf = lines.pop();
+        lines.forEach(function (line) {
+          var t = line.trim();
+          if (t.indexOf('data:') !== 0) return;
+          var data = t.slice(5).trim();
+          if (data === '[DONE]') return;
+          try {
+            var j = JSON.parse(data);
+            var delta = (j.choices && j.choices[0] && j.choices[0].delta) || {};
+            if (delta.reasoning_content) reasoning += delta.reasoning_content;
+            if (delta.content) answer += delta.content;
+          } catch (e) { /* 跳过残缺行 */ }
+        });
+        paint();
+        return pump();
+      });
+    }
+    return pump().then(function () { return { answer: answer, reasoning: reasoning }; });
+  }
+
   function aiSend() {
     var input = $('#aiInput');
     var text = (input.value || '').trim();
     if (!text || aiSending) return;
-    var key = aiKeyOf(aiCfg.provider);
-    if (!key) {
-      toast('请先填入 ' + AI_PRESETS[aiCfg.provider].name + ' 的 API Key');
-      aiSetCollapsed(false);
-      return;
-    }
-    var base = aiBase();
-    if (!base) { toast('自定义渠道请填写接口地址'); aiSetCollapsed(false); return; }
-    var model = aiModel();
-    if (!model) { toast('请填写模型名'); aiSetCollapsed(false); return; }
-    if (AI_PRESETS[aiCfg.provider].cors === false) {
-      toast(AI_PRESETS[aiCfg.provider].name + ' 不支持浏览器直连，请换服务商或用「自定义」填代理地址');
-      aiSetCollapsed(false);
-      return;
+
+    var useBuiltin = aiCfg.mode === 'builtin';
+    if (useBuiltin) {
+      if (!syncUser) {
+        toast('内置通道要先登录（设置 → 云端同步），或改成「自带 Key」');
+        aiSetCollapsed(false);
+        return;
+      }
+    } else {
+      if (!aiKeyOf(aiCfg.provider)) {
+        toast('请先填入 ' + AI_PRESETS[aiCfg.provider].name + ' 的 API Key');
+        aiSetCollapsed(false);
+        return;
+      }
+      if (!aiBase()) { toast('自定义渠道请填写接口地址'); aiSetCollapsed(false); return; }
+      if (!aiModel()) { toast('请填写模型名'); aiSetCollapsed(false); return; }
+      if (AI_PRESETS[aiCfg.provider].cors === false) {
+        toast(AI_PRESETS[aiCfg.provider].name + ' 不支持浏览器直连，请换服务商或用「自定义」填代理地址');
+        aiSetCollapsed(false);
+        return;
+      }
     }
 
     input.value = '';
@@ -2619,71 +2746,22 @@
       ctx.push({ role: m.role, content: m.content });
     });
 
-    var answer = '', reasoning = '';
-    fetch(base + '/chat/completions', {
-      method: 'POST',
-      signal: aiAborter.signal,
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-      body: JSON.stringify({ model: model, messages: ctx, stream: true, temperature: 0.7 })
-    }).then(function (resp) {
-      if (!resp.ok) {
-        return resp.text().then(function (t) {
-          var msg = 'HTTP ' + resp.status;
-          try {
-            var j = JSON.parse(t);
-            msg += '：' + ((j.error && (j.error.message || j.error.code)) || t.slice(0, 300));
-          } catch (e) { msg += '：' + t.slice(0, 300); }
-          throw new Error(msg);
-        });
-      }
-      var reader = resp.body.getReader();
-      var decoder = new TextDecoder('utf-8');
-      var buf = '';
-      function paint() {
-        bubble.innerHTML = '<span class="ai-role">AI 答疑</span>' +
-          (reasoning ? '<div class="ai-reasoning">' + aiEsc(reasoning) + '</div>' : '') +
-          aiMd(answer) + '<span class="ai-cursor"></span>';
-        aiScroll();
-      }
-      function pump() {
-        return reader.read().then(function (r) {
-          if (r.done) return;
-          buf += decoder.decode(r.value, { stream: true });
-          var lines = buf.split('\n');
-          buf = lines.pop();
-          lines.forEach(function (line) {
-            var t = line.trim();
-            if (t.indexOf('data:') !== 0) return;
-            var data = t.slice(5).trim();
-            if (data === '[DONE]') return;
-            try {
-              var j = JSON.parse(data);
-              var delta = (j.choices && j.choices[0] && j.choices[0].delta) || {};
-              if (delta.reasoning_content) reasoning += delta.reasoning_content;
-              if (delta.content) answer += delta.content;
-            } catch (e) { /* 跳过残缺行 */ }
-          });
-          paint();
-          return pump();
-        });
-      }
-      return pump();
-    }).then(function () {
+    var start = useBuiltin ? aiBuiltinRequest(ctx) : aiOwnRequest(ctx);
+    start.then(function (resp) {
+      return aiStreamInto(resp, bubble);
+    }).then(function (r) {
       bubble.innerHTML = '<span class="ai-role">AI 答疑</span>' +
-        (reasoning ? '<div class="ai-reasoning">' + aiEsc(reasoning) + '</div>' : '') +
-        aiMd(answer);
-      var rec = { role: 'assistant', content: answer };
-      if (reasoning) rec.reasoning = reasoning;
+        (r.reasoning ? '<div class="ai-reasoning">' + aiEsc(r.reasoning) + '</div>' : '') +
+        aiMd(r.answer);
+      var rec = { role: 'assistant', content: r.answer };
+      if (r.reasoning) rec.reasoning = r.reasoning;
       aiMsgs.push(rec);
       aiSaveMsgs();
     }).catch(function (err) {
       botEl.className = 'ai-msg error';
-      bubble.textContent = err.name === 'AbortError'
+      bubble.textContent = (err && err.name === 'AbortError')
         ? '已停止生成。'
-        : '请求失败：' + err.message + '\n\n排查建议：1) Key 是否正确、余额是否充足；2) 模型名是否与所选服务商匹配；3) 当前网络能否访问该接口。';
-      if (!answer && !reasoning) {
-        // 完全没收到内容：保留用户消息，移除空气泡对应的数据即可（气泡本身展示错误）
-      }
+        : '请求失败：' + ((err && err.message) || err) + '\n\n排查建议：1) 内置通道需要先登录，且服务端要配好 Key；2) 自带 Key 时确认 Key 与余额；3) 模型名与服务商一致；4) 网络能否访问接口。';
       aiSaveMsgs();
     }).then(function () {
       aiSetSending(false);
@@ -2694,8 +2772,19 @@
   }
 
   function renderAiChat() {
-    if (aiInited) { aiScroll(); return; }
+    if (aiInited) { aiApplyMode(); aiScroll(); return; }
     aiInited = true;
+
+    var modes = $('#aiModes');
+    if (modes) {
+      modes.addEventListener('click', function (e) {
+        var chip = e.target.closest('[data-mode]');
+        if (!chip) return;
+        aiCfg.mode = chip.getAttribute('data-mode') === 'own' ? 'own' : 'builtin';
+        aiSaveCfgLocal();
+        aiApplyMode();
+      });
+    }
 
     var providers = $('#aiProviders');
     if (providers) {
@@ -2726,6 +2815,12 @@
         aiCfg.sys = sysInput ? sysInput.value.trim() : '';
         aiSaveCfgLocal();
         aiRefreshProviderUI();
+        if (aiCfg.mode === 'builtin') {
+          aiSetCollapsed(true);
+          aiApplyMode();
+          toast('设置已保存');
+          return;
+        }
         if (!aiModel()) { toast('请填写模型名'); return; }
         if (aiCfg.provider === 'custom' && !aiCfg.base) { toast('自定义渠道请填写接口地址'); return; }
         aiSetCollapsed(true);
@@ -2769,7 +2864,8 @@
     }
 
     aiRefreshProviderUI();
-    aiSetCollapsed(!!aiKeyOf(aiCfg.provider));
+    aiApplyMode();
+    aiSetCollapsed(aiCfg.mode === 'builtin' ? !!syncUser : !!aiKeyOf(aiCfg.provider));
     aiRenderAll();
   }
 

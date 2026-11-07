@@ -2489,6 +2489,12 @@ textarea:focus {
 .ai-config.is-collapsed .ai-collapsible { display: none; }
 .ai-config-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .ai-label { font-size: 12px; letter-spacing: 0.06em; color: #5c6657; }
+.ai-note {
+  margin-top: -2px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
 .ai-warn {
   margin-top: -4px;
   padding: 9px 12px;
