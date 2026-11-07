@@ -9,7 +9,8 @@
  * 需要的环境变量（Cloudflare Pages → Settings → Environment variables）：
  *   AI_API_KEY        模型服务商的 Key（必填，加密保存）
  *   AI_BASE_URL       接口根地址，默认 https://api.deepseek.com
- *   AI_MODEL          模型名，默认 deepseek-chat
+ *   AI_MODEL          默认模型名，默认 deepseek-chat
+ *   AI_MODELS         允许前端选择的模型，逗号分隔；留空则只允许 AI_MODEL
  *   SUPABASE_URL      你的 Supabase 项目地址（用于校验登录令牌）
  *   SUPABASE_PUBLISHABLE_KEY  Supabase 的 publishable/anon key
  *   AI_ALLOWED_EMAILS 允许使用的邮箱/用户 id，逗号分隔；留空表示任何登录用户都能用
@@ -19,7 +20,28 @@ const DEFAULT_BASE = 'https://api.deepseek.com';
 const DEFAULT_MODEL = 'deepseek-chat';
 const MAX_MESSAGES = 24;
 const MAX_CHARS = 8000;
-const MAX_TOKENS = 1500;
+
+// 思考强度：只影响“回答能有多长 / 有多发散”，模型仍由 allowlist 决定
+const EFFORTS = {
+  fast: { max_tokens: 700, temperature: 0.3, label: '快速' },
+  normal: { max_tokens: 1500, temperature: 0.7, label: '标准' },
+  deep: { max_tokens: 4000, temperature: 0.7, label: '深度' }
+};
+
+function allowlist(env) {
+  const list = String(env.AI_MODELS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (list.length) return list;
+  const one = String(env.AI_MODEL || DEFAULT_MODEL).trim();
+  return one ? [one] : [DEFAULT_MODEL];
+}
+
+// 推理模型（如 deepseek-reasoner）不接受 temperature，传了会报错
+function rejectsTemperature(model) {
+  return /reason/i.test(model);
+}
 
 function json(body, status) {
   return new Response(JSON.stringify(body), {
@@ -28,6 +50,17 @@ function json(body, status) {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store'
     }
+  });
+}
+
+// GET /api/ai → 告诉前端可选模型与思考强度（不含任何密钥）
+export async function onRequestGet({ env }) {
+  const models = allowlist(env);
+  return json({
+    models: models,
+    defaultModel: String(env.AI_MODEL || models[0] || DEFAULT_MODEL),
+    efforts: Object.keys(EFFORTS).map((k) => ({ id: k, label: EFFORTS[k].label })),
+    ready: !!env.AI_API_KEY
   });
 }
 
@@ -85,9 +118,21 @@ export async function onRequestPost({ request, env }) {
     .map((m) => ({ role: m.role, content: String(m.content).slice(0, MAX_CHARS) }));
   if (!messages.length) return json({ error: '没有可发送的内容' }, 400);
 
-  // 5) 转发（模型名与温度由服务端决定，避免前端指定昂贵模型）
+  // 5) 转发：模型必须在 allowlist 里，思考强度决定长度与温度
   const base = String(env.AI_BASE_URL || DEFAULT_BASE).replace(/\/+$/, '');
-  const model = String(env.AI_MODEL || DEFAULT_MODEL);
+  const models = allowlist(env);
+  const wanted = String((body && body.model) || '').trim();
+  const model = models.indexOf(wanted) >= 0 ? wanted : String(env.AI_MODEL || models[0] || DEFAULT_MODEL);
+  const effort = EFFORTS[body && body.effort] ? body.effort : 'normal';
+  const preset = EFFORTS[effort];
+
+  const payload = {
+    model: model,
+    messages: messages,
+    stream: true,
+    max_tokens: preset.max_tokens
+  };
+  if (!rejectsTemperature(model)) payload.temperature = preset.temperature;
 
   let upstream;
   try {
@@ -97,13 +142,7 @@ export async function onRequestPost({ request, env }) {
         'Content-Type': 'application/json',
         Authorization: 'Bearer ' + env.AI_API_KEY
       },
-      body: JSON.stringify({
-        model: model,
-        messages: messages,
-        stream: true,
-        temperature: 0.7,
-        max_tokens: MAX_TOKENS
-      })
+      body: JSON.stringify(payload)
     });
   } catch (e) {
     return json({ error: '连接模型服务失败：' + ((e && e.message) || '网络错误') }, 502);

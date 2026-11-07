@@ -806,6 +806,12 @@
         </div>
 
         <div class="ai-chat-card">
+          <div class="ai-toolbar" id="aiToolbar" hidden>
+            <span class="ai-label">模型</span>
+            <div class="mk-subjects" id="aiModelChips" role="group" aria-label="选择模型"></div>
+            <span class="ai-label">思考</span>
+            <div class="mk-subjects" id="aiEffortChips" role="group" aria-label="思考强度"></div>
+          </div>
           <div class="ai-msgs" id="aiMsgs" aria-live="polite"></div>
           <div class="ai-composer">
             <textarea id="aiInput" class="tool-area" rows="2" maxlength="4000" placeholder="把卡住的题目或知识点发上来。Enter 发送，Shift+Enter 换行" aria-label="向 AI 提问"></textarea>

@@ -2385,15 +2385,26 @@
   var aiSending = false;
   var aiAborter = null;
   var aiInited = false;
+  var aiServerModels = null;    // 服务端允许的模型（GET /api/ai）
+  var aiServerDefault = '';
+  var aiServerLoaded = false;
+
+  var AI_EFFORTS = [
+    { id: 'fast', label: '快速' },
+    { id: 'normal', label: '标准' },
+    { id: 'deep', label: '深度' }
+  ];
 
   function aiLoadCfg() {
-    var def = { mode: 'builtin', provider: 'deepseek', models: {}, base: '', sys: '' };
+    var def = { mode: 'builtin', provider: 'deepseek', models: {}, base: '', sys: '', model: '', effort: 'normal' };
     try {
       var raw = localStorage.getItem(AI_CFG_KEY);
       if (!raw) return def;
       var p = JSON.parse(raw);
       if (!AI_PRESETS[p.provider]) p.provider = 'deepseek';
       if (p.mode !== 'own') p.mode = 'builtin';
+      if (typeof p.model !== 'string') p.model = '';
+      if (!p.effort || ['fast', 'normal', 'deep'].indexOf(p.effort) < 0) p.effort = 'normal';
       if (!p.models || typeof p.models !== 'object') p.models = {};
       if (typeof p.base !== 'string') p.base = '';
       if (typeof p.sys !== 'string') p.sys = '';
@@ -2487,13 +2498,75 @@
     aiMsgs.forEach(function (m) { if (m.role === 'user') rounds++; });
     var tail = rounds ? ' · 已对话 ' + rounds + ' 轮' : '';
     if (aiCfg.mode === 'builtin') {
-      meta.textContent = syncUser ? '账号内置通道' + tail : '内置通道需要登录' + tail;
+      if (!syncUser) { meta.textContent = '内置通道需要登录' + tail; return; }
+      var label = aiEffortLabel(aiCfg.effort);
+      meta.textContent = '账号内置通道 · ' + (aiCurrentModel() || '默认模型') + ' · ' + label + tail;
       return;
     }
     var p = AI_PRESETS[aiCfg.provider];
     meta.textContent = aiKeyOf(aiCfg.provider)
-      ? p.name + ' · ' + aiModel() + tail
+      ? p.name + ' · ' + aiModel() + ' · ' + aiEffortLabel(aiCfg.effort) + tail
       : '尚未配置 — 先在上方填入 ' + p.name + ' 的 API Key';
+  }
+
+  function aiEffortLabel(id) {
+    for (var i = 0; i < AI_EFFORTS.length; i++) if (AI_EFFORTS[i].id === id) return AI_EFFORTS[i].label;
+    return '标准';
+  }
+
+  function aiEffortPreset() {
+    if (aiCfg.effort === 'fast') return { max_tokens: 700, temperature: 0.3 };
+    if (aiCfg.effort === 'deep') return { max_tokens: 4000, temperature: 0.7 };
+    return { max_tokens: 1500, temperature: 0.7 };
+  }
+
+  function aiCurrentModel() {
+    var models = aiServerModels && aiServerModels.length ? aiServerModels : ['deepseek-chat', 'deepseek-reasoner'];
+    if (aiCfg.model && models.indexOf(aiCfg.model) >= 0) return aiCfg.model;
+    if (aiServerDefault && models.indexOf(aiServerDefault) >= 0) return aiServerDefault;
+    return models[0];
+  }
+
+  function aiModelChipLabel(m) {
+    if (/reason/i.test(m)) return m + '（推理）';
+    if (/chat/i.test(m)) return m + '（对话）';
+    return m;
+  }
+
+  function aiRenderToolbar() {
+    var toolbar = $('#aiToolbar');
+    var box = $('#aiModelChips');
+    var ebox = $('#aiEffortChips');
+    if (!toolbar || !box || !ebox) return;
+
+    var builtin = aiCfg.mode === 'builtin';
+    toolbar.hidden = !builtin;
+    if (!builtin) return;
+
+    var models = aiServerModels && aiServerModels.length ? aiServerModels : ['deepseek-chat', 'deepseek-reasoner'];
+    var cur = aiCurrentModel();
+    box.innerHTML = models.map(function (m) {
+      var on = m === cur;
+      return '<button class="unit-chip' + (on ? ' is-on' : '') + '" type="button" data-model="' + aiEsc(m) +
+        '" aria-pressed="' + (on ? 'true' : 'false') + '">' + aiEsc(aiModelChipLabel(m)) + '</button>';
+    }).join('');
+    ebox.innerHTML = AI_EFFORTS.map(function (e) {
+      var on = aiCfg.effort === e.id;
+      return '<button class="unit-chip' + (on ? ' is-on' : '') + '" type="button" data-effort="' + e.id +
+        '" aria-pressed="' + (on ? 'true' : 'false') + '">' + e.label + '</button>';
+    }).join('');
+  }
+
+  function aiLoadServerCfg() {
+    if (aiServerLoaded) return;
+    aiServerLoaded = true;
+    fetch('/api/ai').then(function (r) { return r.ok ? r.json() : null; }).then(function (c) {
+      if (!c) return;
+      aiServerModels = Array.isArray(c.models) && c.models.length ? c.models : null;
+      aiServerDefault = c.defaultModel || '';
+      aiRenderToolbar();
+      aiUpdateMeta();
+    }).catch(function () { /* 离线或未部署，沿用默认模型列表 */ });
   }
 
   // 通道：账号内置（服务端带 Key） / 自带 Key（浏览器直连）
@@ -2523,6 +2596,7 @@
         : '没有 Key？可在服务商官网申请 · 对话记录只保存在本机';
     }
     if (aiInited && !aiMsgs.length) aiRenderAll();
+    aiRenderToolbar();
     aiUpdateMeta();
   }
 
@@ -2643,11 +2717,14 @@
 
   // 自带 Key：浏览器直连服务商
   function aiOwnRequest(ctx) {
+    var preset = aiEffortPreset();
+    var body = { model: aiModel(), messages: ctx, stream: true, temperature: preset.temperature, max_tokens: preset.max_tokens };
+    if (/reason/i.test(aiModel())) delete body.temperature;
     return fetch(aiBase() + '/chat/completions', {
       method: 'POST',
       signal: aiAborter.signal,
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiKeyOf(aiCfg.provider) },
-      body: JSON.stringify({ model: aiModel(), messages: ctx, stream: true, temperature: 0.7 })
+      body: JSON.stringify(body)
     }).then(aiCheckResp);
   }
 
@@ -2660,7 +2737,7 @@
         method: 'POST',
         signal: aiAborter.signal,
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.access_token },
-        body: JSON.stringify({ messages: ctx })
+        body: JSON.stringify({ messages: ctx, model: aiCurrentModel(), effort: aiCfg.effort || 'normal' })
       }).then(aiCheckResp);
     });
   }
@@ -2785,6 +2862,28 @@
         aiApplyMode();
       });
     }
+
+    var toolbar = $('#aiToolbar');
+    if (toolbar) {
+      toolbar.addEventListener('click', function (e) {
+        var m = e.target.closest('[data-model]');
+        if (m) {
+          aiCfg.model = m.getAttribute('data-model');
+          aiSaveCfgLocal();
+          aiRenderToolbar();
+          aiUpdateMeta();
+          return;
+        }
+        var f = e.target.closest('[data-effort]');
+        if (f) {
+          aiCfg.effort = f.getAttribute('data-effort');
+          aiSaveCfgLocal();
+          aiRenderToolbar();
+          aiUpdateMeta();
+        }
+      });
+    }
+    aiLoadServerCfg();
 
     var providers = $('#aiProviders');
     if (providers) {
