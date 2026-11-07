@@ -2713,7 +2713,9 @@
       } catch (err) {
         if (t) msg += '：' + t.slice(0, 300);
       }
-      throw new Error(msg);
+      var e2 = new Error(msg);
+      e2.status = resp.status;
+      throw e2;
     });
   }
 
@@ -2844,9 +2846,16 @@
       aiSaveMsgs();
     }).catch(function (err) {
       botEl.className = 'ai-msg error';
-      bubble.textContent = (err && err.name === 'AbortError')
-        ? '已停止生成。'
-        : '请求失败：' + ((err && err.message) || err) + '\n\n排查建议：1) 内置通道需要先登录，且服务端要配好 Key；2) 自带 Key 时确认 Key 与余额；3) 模型名与服务商一致；4) 网络能否访问接口。';
+      if (err && err.name === 'AbortError') {
+        bubble.textContent = '已停止生成。';
+        aiSaveMsgs();
+        return;
+      }
+      var status = err && err.status;
+      var tired = status === 429 || status === 403;
+      var tips = tired ? '' :
+        '\n\n排查建议：1) 内置通道需要先登录，且服务端要配好 Key；2) 自带 Key 时确认 Key 与余额；3) 模型名与服务商一致；4) 网络能否访问接口。';
+      bubble.textContent = '请求失败：' + ((err && err.message) || err) + tips;
       aiSaveMsgs();
     }).then(function () {
       aiSetSending(false);
