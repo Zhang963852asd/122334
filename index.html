@@ -123,7 +123,11 @@
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg>
         <span>收藏</span>
       </a>
-      <a class="nav-item" href="#settings" data-view="settings" style="--i:8">
+      <a class="nav-item" href="#aichat" data-view="aichat" style="--i:8">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chat"/></svg>
+        <span>AI 答疑</span>
+      </a>
+      <a class="nav-item" href="#settings" data-view="settings" style="--i:9">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sliders"/></svg>
         <span>设置</span>
       </a>
@@ -737,6 +741,75 @@
       </div>
     </section>
 
+    <!-- ================= AI 答疑 ================= -->
+    <section class="view" id="view-aichat" data-view="aichat" hidden>
+      <div class="pad">
+        <header class="page-head">
+          <div>
+            <h1 class="page-title">AI <em>答疑</em></h1>
+            <p class="page-sub">接入你自己的大模型 Key（深度求索 DeepSeek 等），卡住的题随时问。Key 只保存在本机浏览器，不上传云端。</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" type="button" id="aiCfgToggle" aria-expanded="true">AI 设置</button>
+        </header>
+
+        <div class="settings-card ai-config" id="aiConfig">
+          <p class="ai-summary" id="aiCfgSummary" hidden></p>
+          <div id="aiCfgBody">
+          <div class="ai-config-row">
+            <span class="ai-label">服务商</span>
+            <div class="mk-subjects" id="aiProviders" role="group" aria-label="选择服务商">
+              <button class="unit-chip is-on" type="button" data-provider="deepseek" aria-pressed="true">DeepSeek</button>
+              <button class="unit-chip" type="button" data-provider="moonshot" aria-pressed="false">Kimi</button>
+              <button class="unit-chip" type="button" data-provider="zhipu" aria-pressed="false">智谱 GLM</button>
+              <button class="unit-chip" type="button" data-provider="qwen" aria-pressed="false">通义千问</button>
+              <button class="unit-chip" type="button" data-provider="openai" aria-pressed="false">OpenAI</button>
+              <button class="unit-chip" type="button" data-provider="custom" aria-pressed="false">自定义</button>
+            </div>
+          </div>
+          <p class="ai-warn" id="aiCorsWarn" hidden></p>
+          <div class="ai-config-grid">
+            <label class="mk-field" for="aiKey">
+              <span>API Key（按服务商分别保存，仅存本机）</span>
+              <input id="aiKey" type="password" maxlength="200" placeholder="sk-..." autocomplete="off">
+            </label>
+            <label class="mk-field" for="aiModel">
+              <span>模型</span>
+              <input id="aiModel" type="text" list="aiModelList" maxlength="80" placeholder="deepseek-chat" autocomplete="off">
+              <datalist id="aiModelList"></datalist>
+            </label>
+            <label class="mk-field" for="aiBase" id="aiBaseWrap" hidden>
+              <span>接口地址（OpenAI 兼容，自定义渠道必填）</span>
+              <input id="aiBase" type="text" maxlength="200" placeholder="https://example.com/v1" autocomplete="off">
+            </label>
+          </div>
+          <label class="mk-field" for="aiSys">
+            <span>系统提示词（可留空，默认是耐心的中学辅导老师）</span>
+            <textarea id="aiSys" class="tool-area" rows="2" maxlength="600" placeholder="例如：只辅导语文，回答控制在 200 字以内。"></textarea>
+          </label>
+          <div class="mk-form-actions">
+            <span class="hint">没有 Key？<a href="https://platform.deepseek.com/api_keys" id="aiKeyLink" target="_blank" rel="noopener">去官方平台申请</a> · 对话记录只保存在本机</span>
+            <button class="btn btn-solid btn-sm" type="button" id="aiSaveCfg">保存配置</button>
+          </div>
+          </div>
+        </div>
+
+        <div class="ai-chat-card">
+          <div class="ai-msgs" id="aiMsgs" aria-live="polite"></div>
+          <div class="ai-composer">
+            <textarea id="aiInput" class="tool-area" rows="2" maxlength="4000" placeholder="把卡住的题目或知识点发上来。Enter 发送，Shift+Enter 换行" aria-label="向 AI 提问"></textarea>
+            <div class="ai-composer-btns">
+              <span class="hint" id="aiMeta">尚未配置</span>
+              <button class="btn btn-ghost btn-sm" type="button" id="aiClear">清空对话</button>
+              <button class="btn btn-solid btn-sm" type="button" id="aiSend">发送 <span class="arrow">→</span></button>
+              <button class="btn btn-danger btn-sm" type="button" id="aiStop" hidden>停止</button>
+            </div>
+          </div>
+        </div>
+
+        <p class="whisper">听懂一道题，比刷十道题更值。</p>
+      </div>
+    </section>
+
     <!-- ================= 收尾 ================= -->
     <section class="closing">
       <div class="closing-bg" role="img" aria-label="水彩书房插画：书桌、窗与绿植"></div>
@@ -772,6 +845,7 @@
             <a href="#tools" data-nav="tools">学习工具</a>
             <a href="#mistakes" data-nav="mistakes">错题本</a>
             <a href="#quotes" data-nav="quotes">每日名句</a>
+            <a href="#aichat" data-nav="aichat">AI 答疑</a>
           </div>
           <div class="footer-col">
             <h3>联系</h3>
