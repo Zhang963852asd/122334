@@ -20,6 +20,7 @@ const DEFAULT_BASE = 'https://api.deepseek.com';
 const DEFAULT_MODEL = 'deepseek-chat';
 const MAX_MESSAGES = 24;
 const MAX_CHARS = 8000;
+const DEFAULT_DAILY_LIMIT = 40;
 
 // 思考强度：只影响“回答能有多长 / 有多发散”，模型仍由 allowlist 决定
 const EFFORTS = {
@@ -27,6 +28,36 @@ const EFFORTS = {
   normal: { max_tokens: 1500, temperature: 0.7, label: '标准' },
   deep: { max_tokens: 4000, temperature: 0.7, label: '深度' }
 };
+
+function dailyLimit(env) {
+  const n = Number(env.AI_DAILY_LIMIT);
+  return n > 0 ? Math.min(Math.floor(n), 500) : DEFAULT_DAILY_LIMIT;
+}
+
+// 按北京时间切日，key 形如 q:<user>:2026-11-07
+function quotaKey(userId) {
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  return 'q:' + userId + ':' + d.toISOString().slice(0, 10);
+}
+
+// 没有绑定 KV 时直接放行，保证站点不会因为少个绑定就不可用
+async function checkQuota(env, userId) {
+  const limit = dailyLimit(env);
+  if (!env.AI_QUOTA) return { ok: true, left: null, limit };
+  const key = quotaKey(userId);
+  const used = Number(await env.AI_QUOTA.get(key)) || 0;
+  if (used >= limit) return { ok: false, used, left: 0, limit, key };
+  return { ok: true, used, left: Math.max(0, limit - used - 1), limit, key };
+}
+
+async function bumpQuota(env, quota) {
+  if (!env.AI_QUOTA || !quota || !quota.key) return;
+  try {
+    await env.AI_QUOTA.put(quota.key, String((quota.used || 0) + 1), { expirationTtl: 172800 });
+  } catch (e) {
+    /* 计数失败不影响本次回答 */
+  }
+}
 
 function allowlist(env) {
   const list = String(env.AI_MODELS || '')
@@ -134,6 +165,16 @@ export async function onRequestPost({ request, env }) {
   };
   if (!rejectsTemperature(model)) payload.temperature = preset.temperature;
 
+  // 每日次数上限（绑定 KV 才生效）
+  const quota = await checkQuota(env, user.id);
+  if (!quota.ok) {
+    return json(
+      { error: '今天的提问次数用完了（上限 ' + quota.limit + ' 次/天），明天再来吧' },
+      429
+    );
+  }
+  await bumpQuota(env, quota);
+
   let upstream;
   try {
     upstream = await fetch(base + '/chat/completions', {
@@ -162,12 +203,11 @@ export async function onRequestPost({ request, env }) {
   }
 
   // 6) 原样透传 SSE
-  return new Response(upstream.body, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'X-Accel-Buffering': 'no'
-    }
-  });
+  const headers = {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Accel-Buffering': 'no'
+  };
+  if (quota.left !== null && quota.left !== undefined) headers['x-ai-quota-left'] = String(quota.left);
+  return new Response(upstream.body, { status: 200, headers });
 }

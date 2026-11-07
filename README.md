@@ -112,6 +112,9 @@ alter table public.zhixing_saves enable row level security;
 | `SUPABASE_URL` | 你的 Supabase 项目地址（用于校验令牌） |
 | `SUPABASE_PUBLISHABLE_KEY` | Supabase 的 publishable / anon key |
 | `AI_ALLOWED_EMAILS` | 允许使用的邮箱或用户 id，逗号分隔；**站点开放注册时强烈建议填上**，否则任何注册用户都能用你的额度 |
+| `AI_DAILY_LIMIT` | 每人每天提问次数上限，默认 40，最大 500 |
+
+**每日次数上限**依赖一个 KV 命名空间绑定（Pages → Settings → Bindings → KV，变量名 `AI_QUOTA`）。没绑定时会自动跳过限流、只保留其它限制，不会报错。计数按北京时间切日，存 `q:<user_id>:<YYYY-MM-DD>`，两天后自动过期；前端会在状态栏显示"今日剩 N 次"。
 
 智谱 GLM 的免费模型（如 `glm-4-flash`）也能用，只是要换个 `AI_BASE_URL`：`https://open.bigmodel.cn/api/paas/v4`。
 

@@ -2388,6 +2388,7 @@
   var aiServerModels = null;    // 服务端允许的模型（GET /api/ai）
   var aiServerDefault = '';
   var aiServerLoaded = false;
+  var aiQuotaLeft = null;       // 服务端返回的今日剩余次数
 
   var AI_EFFORTS = [
     { id: 'fast', label: '快速' },
@@ -2500,7 +2501,8 @@
     if (aiCfg.mode === 'builtin') {
       if (!syncUser) { meta.textContent = '内置通道需要登录' + tail; return; }
       var label = aiEffortLabel(aiCfg.effort);
-      meta.textContent = '账号内置通道 · ' + (aiCurrentModel() || '默认模型') + ' · ' + label + tail;
+      var quota = (aiQuotaLeft !== null && isFinite(aiQuotaLeft)) ? ' · 今日剩 ' + aiQuotaLeft + ' 次' : '';
+      meta.textContent = '账号内置通道 · ' + (aiCurrentModel() || '默认模型') + ' · ' + label + quota + tail;
       return;
     }
     var p = AI_PRESETS[aiCfg.provider];
@@ -2825,6 +2827,12 @@
 
     var start = useBuiltin ? aiBuiltinRequest(ctx) : aiOwnRequest(ctx);
     start.then(function (resp) {
+      if (useBuiltin) {
+        try {
+          var left = resp.headers.get('x-ai-quota-left');
+          if (left !== null && left !== '') aiQuotaLeft = Number(left);
+        } catch (e) { /* 读不到就算了 */ }
+      }
       return aiStreamInto(resp, bubble);
     }).then(function (r) {
       bubble.innerHTML = '<span class="ai-role">AI 答疑</span>' +
